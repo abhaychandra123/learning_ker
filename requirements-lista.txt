@@ -1,0 +1,6 @@
+# Use Kaggle's existing CUDA-compatible torch installation when available.
+# Versions actually used by each experiment are written to metrics.json.
+numpy>=1.24
+pandas>=2.0
+matplotlib>=3.7
+torch>=2.6
