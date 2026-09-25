@@ -1,0 +1,18 @@
+{
+  "slides": 31,
+  "main_slides": 20,
+  "results": {
+    "metrics.json": "faae44fddad0c3e8a992e8b9433ff78b8d969beddca2f24d3dab86eab0f4945f",
+    "comparison_table-2.csv": "3e4d3b9a9c6024c014d0e15e2709e4cd001781f751bbc310e6657e5679e8db48",
+    "reconstructions.png": "0e53df3b59ae14cd508af1548733763a6ee0c6366d2218a460d5e0bc52b8ee76",
+    "comparison_table.csv": "cf17d29541cf4c327cb33becc05bd54be82cb757d60ac524c5e31fcf1c64ce76",
+    "convergence.png": "1073e0d092a1a9b19e4b9defdadef21a9eb590c87d1f1a7bdc94146019743b2b",
+    "reconstructions-2.png": "8cdab4bdb4b729595e4a74874aa551bac3cc2c9170169c1d3111048214f24314",
+    "training_and_latency-2.png": "cbb32baa2817be25c9c964b7e778aebd87963d2c8b519dc950ff8e74a2c0f989",
+    "convergence-2.png": "5450273b8f0a03b53e42a9bd1b4cdb9edb772a6e2a1528be7150c8bfb2660e14",
+    "training_and_latency.png": "35c5cfa9c82022623fe380f5fded4fdaf7816cb0a44be1c359257ad1d0b07939",
+    "metrics-2.json": "fa1f641b536e940aa16b2f13b0ab73181c11379908194f6332a782642fe696a4"
+  },
+  "source_hashes_match": true,
+  "input_hashes_match": true
+}
