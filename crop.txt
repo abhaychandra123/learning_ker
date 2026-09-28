@@ -1,0 +1,6 @@
+rops reuse the same measurement; they don’t become independent simulations.
+
+
+The main complication is crop boundaries. A blurred crop receives contributions from sharp-field values outside that crop
+
+One important consequence: cropping cannot add information beyond all the original pixels. It can expose useful local variation, control sampling, and show how much spatial coverage is needed to identify a stable kernel.

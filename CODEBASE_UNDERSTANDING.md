@@ -1,5 +1,7 @@
 # Codebase Understanding
 
+> Historical audit of revision `d845403`, before the LISTA/FISTA extension. For current coding context, start with [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) and [LISTA_FISTA.md](LISTA_FISTA.md). The repository now includes a neural model, FISTA, tests, a dependency manifest, a Kaggle notebook, and saved training metrics; statements below about their absence apply to the audited revision.
+
 Investigation date: 23 September 2026. Repository: `learning_ker`. Inspected revision: `d8454034b09cbeb5f2313c829f50368cf9ce0522`, with a clean working tree before this document was added.
 
 Evidence labels used below:
