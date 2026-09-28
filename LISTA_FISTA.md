@@ -1,6 +1,6 @@
 # LISTA, ISTA and FISTA: implementation and experiment
 
-This extends the original `scripts/deblur.py` without modifying it. The agreed experiment is the primary coil, z=3 → 0.5 µm, fitting all three component images. LISTA is supervised against the sharp COMSOL images and learns convolutional corrections to the exact padded physics operator, plus a threshold. The supplied notebook runs training on Kaggle; no full-data LISTA training result is claimed from local checks.
+This extends the original padded inverse operator. ISTA/FISTA now stop by epsilon in both the standalone entry points and the comparison pipeline. The agreed experiment is the primary coil, z=3 → 0.5 µm, fitting all three component images. LISTA is supervised against the sharp COMSOL images and learns convolutional corrections to the exact padded physics operator, plus a threshold. The supplied notebook runs training on Kaggle; no full-data LISTA training result is claimed from local checks.
 
 ## Theory and the exact variant
 
@@ -44,6 +44,26 @@ Corrections start at zero and `theta=alpha*lambda`, so before training every lay
 
 All methods default to `x0=b` to match existing repository ISTA. `--initial zero` is available and applies consistently to all three; original LISTA usually starts from zero. This deviation is explicit.
 
+## Epsilon-based stopping (29 September 2026)
+
+The CLI and Kaggle configuration ask for `--epsilon` / `EPSILON`, not a baseline iteration count. Default **1e-3 = 0.001 = 10E-4**. This is a dimensionless relative optimality tolerance, not an image-error target or an absolute change in the objective.
+
+For each component, at the initial image and after every update, compute:
+
+```
+G(x) = (x - soft(x - alpha*A*(A*x-b), alpha*lambda)) / alpha
+relative_pg = RMS(G(x)) / RMS(G(x0))
+stop when relative_pg <= epsilon
+```
+
+An initially zero residual is already converged. The GPU batch stops only when **every component** satisfies the criterion. Check the actual proximal iterate `x`, not FISTA's extrapolated `y`. Ground truth is only used for reporting reconstruction errors. Because both residuals scale together, changing between physical and normalized field units leaves this stopping criterion unchanged. The proximal-gradient mapping measures stationarity; see [Parikh and Boyd's proximal algorithms](https://web.stanford.edu/~boyd/papers/prox_algs.html).
+
+`record_every` controls saved history frequency, not stopping checks. Final history is always saved, including when the solver stops between reporting intervals. Metrics include epsilon, relative residual, actual iterations, `converged`, and `stop_reason`. Actual counts are also shown in reconstruction titles, convergence legends/endpoints, timing labels, and `comparison_table.csv` (with LISTA trained layers in a separate column). Standalone ISTA/FISTA save per-component CSV/JSON summaries and convergence plots showing each component’s own count and stopping reason. A 100,000-update internal safety limit or 20 consecutive exactly unchanged iterates while epsilon remains unmet returns `converged=false`, with `safety_limit` or `numerical_stagnation`; neither is silently presented as convergence. Nonfinite calculations raise an error.
+
+LISTA retains its configured trained depth, explicitly confirmed by the user. Its training epoch count also remains a training setting. The model is not repeatedly extended to force the L1 residual below epsilon. Fixed-depth ISTA/FISTA comparisons are still automatically derived from LISTA's layer count. Low-level `n_iter` remains only for these fixed-depth numerical/reference uses, while normal solver calls default to convergence stopping.
+
+Comparisons are named `ista_to_epsilon` / `fista_to_epsilon`, alongside `lista` and same-depth diagnostics such as `ista_8`. The adaptive latency benchmark reruns the full epsilon-stopped algorithm with its stopping checks, not a cheaper fixed-count replay. Recorded `solver_seconds` also includes stopping checks, excluding extra reporting diagnostics.
+
 ## Units and loss
 
 All six field arrays are loaded using the existing float32-T-to-µT scaling. Kernel fitting uses NumPy float64. Training/inference use PyTorch float32 without AMP or TF32. Define a single scale `q=max(abs(all sharp and blurred fields))`, then use `u=x/q`, `v=b/q` and **lambda_normalized=lambda_uT/q**. Thus
@@ -69,12 +89,12 @@ Two T4s are used through DataParallel to split the three-image training batch 2+
 Outputs compare:
 
 - ISTA/FISTA at the same number of updates as LISTA's trained depth.
-- ISTA/FISTA at the longer baseline budget (200 updates by default).
+- ISTA/FISTA run until the relative proximal-gradient residual reaches epsilon (default 1e-3); actual update counts and stop reasons are recorded.
 - L1 objective and proximal-gradient RMS, measuring optimization progress.
 - Physical RMSE, range-normalised RMSE and relative L2 error, measuring reconstruction agreement.
 - Warmed, synchronized median inference latency, separately from kernel fitting and training time.
 
-A LISTA layer performs the physics gradient **plus** learned convolutions; it costs more than an ISTA iteration. Equal depth alone is not equal computation. No general speedup is claimed before measuring the Kaggle run. Training time includes post-update evaluation and best-weight copying; inference latency excludes diagnostics and disk writes. CUDA timing explicitly synchronizes before and after each measured call.
+A LISTA layer performs the physics gradient **plus** learned convolutions; it costs more than an ISTA iteration. Equal depth alone is not equal computation. No general speedup follows from layer counts alone. Training time includes post-update evaluation and best-weight copying; inference latency excludes reporting diagnostics and disk writes, but includes the convergence checks needed by adaptive ISTA/FISTA. CUDA timing explicitly synchronizes before and after each measured call.
 
 The proximal-gradient mapping is `(x-soft(x-alpha*grad J_data,alpha*lambda))/alpha`. Its RMS is zero at an L1 optimum and is reported in physical units. It does not require a ground-truth solution or invent a reference optimum. For LISTA it is only a diagnostic because LISTA optimizes supervised MSE.
 
@@ -97,10 +117,10 @@ Example local commands, using a suitable PyTorch environment:
 
 ```bash
 python -m unittest discover -s tests -v
-python scripts/fista.py --z 3 --comp Bz --n-iter 100 --output runs/fista_z3
+python scripts/fista.py --z 3 --comp Bz --epsilon 1e-3 --output runs/fista_z3
 python scripts/lista.py --data-root . --z 3 --device cuda --gpus 2 \
   --layers 8 --kernel-size 9 --epochs 200 --lr 1e-4 \
-  --baseline-iterations 200 --pad 32 --lambda-ista 1e-4 \
+  --epsilon 1e-3 --pad 32 --lambda-ista 1e-4 \
   --checkpoint-layers --output runs/compare_z3
 ```
 
@@ -117,9 +137,9 @@ Each comparison directory contains:
 | `lista_best_training.pt` | CPU state dict, physics buffers, exact original norm bound/step configuration, scaling, architecture, selected epoch and loss. |
 | `kernel.npy` | The NumPy complex128 empirical transfer before conversion to float32 buffers. |
 | `reconstructions.npz` | Sharp reference, observation, original untrained LISTA, trained LISTA, ISTA and FISTA arrays, all in µT. |
-| `metrics.json` | Per-iteration objectives/errors, training history, same-depth/long-run scores and latency samples, parameter changes, configuration, environment and SHA-256 input/source hashes. |
+| `metrics.json` | Per-iteration objectives/errors, training history, same-depth/epsilon-stopped scores and latency samples, parameter changes, configuration, environment and SHA-256 input/source hashes. |
 | `reconstructions.png` | Full-image reference/observation/three-method comparison; common percentile display scale per component. |
-| `convergence.png` | Objective, reference NRMSE and stationarity versus iteration/layer. |
+| `convergence.png` | Objective, reference NRMSE, physical stationarity, and relative stationarity with the epsilon line versus iteration/layer. |
 | `training_and_latency.png` | Training loss and inference latencies. |
 
 To reload a checkpoint without fitting H or retraining:
@@ -139,4 +159,4 @@ The loader restores the original double-fit norm bound rather than recomputing i
 
 Local checks pass for: padded adjoint against an explicit matrix transpose; FFT operator/autograd against NumPy; ISTA equivalence to existing code; FISTA against an explicit-matrix recurrence and an exact L1 solution; all-layer LISTA initialization equivalence; learned weight/threshold gradients against finite differences; physical-unit normalization; checkpointed versus ordinary gradients; training loss/weight updates; and checkpoint round-trip output equality.
 
-The two-CUDA-device gradient-weighting check is included and runs in the Kaggle notebook. It is skipped locally because CUDA is unavailable. A tiny synthetic CLI run checks artifact creation; a two-iteration full-resolution FISTA check checks the real-data entry point. These are verification runs, not scientific performance results. Full coil LISTA training, its accuracy and any GPU speedup remain to be measured by the supplied notebook.
+The two-CUDA-device gradient-weighting check is included and runs in the Kaggle notebook; it is skipped locally because CUDA is unavailable. Convergence tests additionally check known solutions, NumPy/PyTorch stopping parity, unit scaling, logging independence, stricter tolerances, initial optima, and honest safety-limit reporting. Saved historical Kaggle runs in `notebooks/runs_results` use fixed 200/500-update baselines; they are preserved and are not results of the new epsilon-stopped protocol. Local synthetic checks verify implementation, not full-data performance.

@@ -92,6 +92,57 @@ class IterativeTests(unittest.TestCase):
         np.testing.assert_array_equal(x, b)
         self.assertEqual(len(rows), 1)
 
+    def test_epsilon_stopping_matches_known_solution_and_ignores_recording(self):
+        b = np.array([[.2, -2., 1.], [0., .05, -1.]])
+        h = np.ones(b.shape)
+        optimum = np.sign(b)*np.maximum(abs(b)-.1, 0)
+        for method in ('ista', 'fista'):
+            x, history = solve_l1(b, h, .1, method=method, pad=0, epsilon=1e-5,
+                                  initial='zero', record_every=1000)
+            other, dense_history = solve_l1(b, h, .1, method=method, pad=0, epsilon=1e-5,
+                                            initial='zero', record_every=1)
+            np.testing.assert_array_equal(x, other)
+            np.testing.assert_allclose(x, optimum, atol=2e-5)
+            self.assertEqual(history[-1]['iteration'], dense_history[-1]['iteration'])
+            self.assertTrue(history[-1]['converged'])
+            self.assertEqual(history[-1]['stop_reason'], 'converged')
+            self.assertLessEqual(history[-1]['relative_pg'], 1e-5)
+            self.assertGreater(dense_history[-2]['relative_pg'], 1e-5)
+
+    def test_tighter_epsilon_and_unit_scaling(self):
+        shape = (8, 9)
+        h = np.exp(-4*np.hypot(np.fft.fftfreq(8)[:, None], np.fft.fftfreq(9)))
+        b = self.rng.normal(size=shape)
+        for method in ('ista', 'fista'):
+            _, loose = solve_l1(b, h, .03, method=method, pad=0, epsilon=1e-2)
+            x, strict = solve_l1(b, h, .03, method=method, pad=0, epsilon=1e-4)
+            scaled, scaled_rows = solve_l1(b/37, h, .03/37, method=method, pad=0, epsilon=1e-4)
+            self.assertGreater(strict[-1]['iteration'], loose[-1]['iteration'])
+            self.assertEqual(strict[-1]['iteration'], scaled_rows[-1]['iteration'])
+            np.testing.assert_allclose(x, scaled*37, atol=1e-12)
+
+    def test_safety_limit_is_not_convergence_and_truth_does_not_stop_solver(self):
+        b = self.rng.normal(size=(4, 5))
+        h = np.ones(b.shape)
+        _, limited = solve_l1(b, h, .2, method='ista', pad=0, initial='zero',
+                              epsilon=1e-12, max_iterations=1)
+        self.assertFalse(limited[-1]['converged'])
+        self.assertEqual(limited[-1]['stop_reason'], 'safety_limit')
+        x, a = solve_l1(b, h, .2, method='fista', pad=0, truth=b)
+        y, different_truth = solve_l1(b, h, .2, method='fista', pad=0, truth=b*99)
+        np.testing.assert_array_equal(x, y)
+        self.assertEqual(a[-1]['iteration'], different_truth[-1]['iteration'])
+
+    def test_initial_optimum_and_invalid_epsilon(self):
+        b = np.zeros((3, 4)); h = np.ones(b.shape)
+        for method in ('ista', 'fista'):
+            _, rows = solve_l1(b, h, .1, method=method, pad=0)
+            self.assertEqual(rows[-1]['iteration'], 0)
+            self.assertTrue(rows[-1]['converged'])
+        for eps in (0, -1, 1, float('nan'), float('inf')):
+            with self.assertRaises(ValueError):
+                solve_l1(b, h, .1, method='ista', pad=0, epsilon=eps)
+
 
 if __name__ == '__main__':
     unittest.main()

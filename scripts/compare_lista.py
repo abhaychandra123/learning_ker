@@ -151,7 +151,8 @@ def main(argv=None):
     parser.add_argument('--kernel-size', type=int, default=9)
     parser.add_argument('--epochs', type=int, default=200)
     parser.add_argument('--lr', type=float, default=1e-4)
-    parser.add_argument('--baseline-iterations', type=int, default=200)
+    parser.add_argument('--epsilon', type=float, default=1e-3,
+                        help='ISTA/FISTA relative proximal-gradient tolerance (default: 0.001)')
     parser.add_argument('--initial', choices=('blurred', 'zero'), default='blurred')
     parser.add_argument('--device', choices=('cpu', 'cuda'), default='cuda')
     parser.add_argument('--gpus', type=int, default=1)
@@ -161,9 +162,11 @@ def main(argv=None):
     parser.add_argument('--benchmark-repeats', type=int, default=3)
     args = parser.parse_args(argv)
     if (args.pad < 0 or args.epochs < 0 or args.layers < 1 or args.kernel_size < 1
-            or args.kernel_size % 2 == 0 or args.baseline_iterations < args.layers
+            or args.kernel_size % 2 == 0
             or args.record_every < 1 or args.benchmark_repeats < 1 or args.gpus < 1):
-        parser.error('invalid integer settings; baseline-iterations must be >= layers')
+        parser.error('invalid integer settings')
+    if not np.isfinite(args.epsilon) or not 0 < args.epsilon < 1:
+        parser.error('epsilon must be finite and strictly between 0 and 1')
     if (not np.isfinite(args.lambda_ista) or args.lambda_ista < 0
             or not np.isfinite(args.lr) or args.lr <= 0):
         parser.error('lambda must be nonnegative and learning rate positive, both finite')
@@ -206,14 +209,20 @@ def main(argv=None):
     state_before = cpu_state(model)
     predictions, histories, baselines = {}, {}, {}
     for method in ('ista', 'fista'):
-        print(f'Running {method.upper()} on {device}', flush=True)
+        print(f'Running {method.upper()} to epsilon={args.epsilon:g} on {device}', flush=True)
         x, history, wall_seconds = solve_torch(
-            b, operator, lam, method=method, n_iter=args.baseline_iterations,
+            b, operator, lam, method=method, epsilon=args.epsilon,
             initial=args.initial, truth=truth, scale=scale, record_every=args.record_every)
         predictions[method] = x.cpu().numpy()[:, 0]*scale
         histories[method] = history
-        baselines[method] = {'iterations': args.baseline_iterations,
+        final = history[-1]
+        baselines[method] = {'iterations': final['iteration'],
+                             'converged': final['converged'], 'stop_reason': final['stop_reason'],
+                             'relative_pg_max': final['relative_pg_max'], 'epsilon': args.epsilon,
+                             'safety_max_iterations': final['safety_max_iterations'],
                              'wall_seconds_with_metrics': wall_seconds}
+        print(f"{method.upper()}: {final['stop_reason']} after {final['iteration']} updates; "
+              f"relative PG={final['relative_pg_max']:.6g}", flush=True)
     print('Training LISTA on all three component images (no holdout).', flush=True)
 
     def log(row):
@@ -239,15 +248,21 @@ def main(argv=None):
                              'metrics': path_rows[-1]['components'],
                              'inference': benchmark(lambda: model(b), device, args.benchmark_repeats)}}
     for method in ('ista', 'fista'):
-        for count in sorted(set((args.layers, args.baseline_iterations))):
-            fn = lambda method=method, count=count: fixed_steps(
-                b, operator, lam, method, count, args.initial)
-            with torch.no_grad():
-                prediction = fn()
-                scores = evaluate(prediction, b, truth, operator, lam, scale)
-            comparisons[f'{method}_{count}'] = {
-                'iterations': count, 'metrics': scores,
-                'inference': benchmark(fn, device, args.benchmark_repeats)}
+        # Same-depth entries remain diagnostics derived from LISTA's architecture.
+        fn = lambda method=method: fixed_steps(b, operator, lam, method, args.layers, args.initial)
+        with torch.no_grad():
+            prediction = fn()
+            scores = evaluate(prediction, b, truth, operator, lam, scale)
+        comparisons[f'{method}_{args.layers}'] = {
+            'iterations': args.layers, 'evaluation': 'fixed trained-depth comparison',
+            'metrics': scores, 'inference': benchmark(fn, device, args.benchmark_repeats)}
+        # Include convergence checks in the adaptive inference benchmark.
+        adaptive_fn = lambda method=method: solve_torch(
+            b, operator, lam, method=method, initial=args.initial, epsilon=args.epsilon,
+            scale=scale, record_every=args.record_every, diagnostics=False)
+        comparisons[f'{method}_to_epsilon'] = {
+            **baselines[method], 'metrics': histories[method][-1]['components'],
+            'inference': benchmark(adaptive_fn, device, args.benchmark_repeats)}
     learned_changes = {name: float((param.detach().cpu()-state_before[name]).norm())
                        for name, param in model.named_parameters()}
     checkpoint_data = {
@@ -276,7 +291,8 @@ def main(argv=None):
         'training': training, 'histories': histories, 'baselines': baselines,
         'comparisons': comparisons,
         'timing': 'Training may use two GPUs; all inference uses one identical device/dtype/batch. '
-                  'Median warmed synchronized latency excludes I/O and metrics. Iteration histories exclude metrics from solver_seconds.',
+                  'Median warmed synchronized latency includes adaptive stopping checks, excludes I/O and reporting metrics. '
+                  'solver_seconds includes convergence checks but excludes reporting diagnostics.',
         'environment': {'python': platform.python_version(), 'numpy': np.__version__,
                         'torch': str(torch.__version__), 'cuda_runtime': torch.version.cuda,
                         'device': str(device), 'gpu_names': [torch.cuda.get_device_name(i) for i in range(args.gpus)]

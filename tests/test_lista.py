@@ -54,6 +54,46 @@ class LISTATests(unittest.TestCase):
         np.testing.assert_allclose(x[0, 0]*scale, expected, atol=1e-12, rtol=1e-12)
         self.assertAlmostEqual(rows[-1]['components'][0]['objective'], nr[-1]['objective'], places=10)
 
+    def test_adaptive_torch_matches_numpy_and_benchmark_stopping(self):
+        # One component isolates exact stopping-iteration parity with NumPy.
+        b = self.b[:1]
+        op = PaddedFFT(self.h, self.shape, self.pad, torch.float64)
+        for method in ('ista', 'fista'):
+            x, rows, _ = solve_torch(b, op, .1, method=method, epsilon=1e-4, truth=b,
+                                      record_every=1000)
+            expected, numpy_rows = solve_l1(b[0, 0].numpy(), self.h, .1, method=method,
+                                            pad=self.pad, epsilon=1e-4)
+            self.assertEqual(rows[-1]['iteration'], numpy_rows[-1]['iteration'])
+            np.testing.assert_allclose(x[0, 0], expected, atol=1e-11)
+            self.assertTrue(rows[-1]['converged'])
+            timed, timed_rows, _ = solve_torch(b, op, .1, method=method, epsilon=1e-4,
+                                               diagnostics=False, record_every=1)
+            torch.testing.assert_close(x, timed, rtol=0, atol=0)
+            self.assertEqual(rows[-1]['iteration'], timed_rows[-1]['iteration'])
+
+    def test_adaptive_batch_checks_every_component_and_preserves_units(self):
+        op = PaddedFFT(self.h, self.shape, self.pad, torch.float64)
+        x, rows, _ = solve_torch(self.b, op, .1, method='fista', epsilon=1e-4)
+        scaled, scaled_rows, _ = solve_torch(self.b/37, op, .1/37, method='fista',
+                                            epsilon=1e-4, scale=37)
+        torch.testing.assert_close(x, scaled*37, rtol=1e-10, atol=1e-11)
+        self.assertEqual(rows[-1]['iteration'], scaled_rows[-1]['iteration'])
+        self.assertTrue(all(r['relative_pg'] <= 1e-4 for r in rows[-1]['components']))
+        self.assertTrue(rows[-1]['converged'])
+
+    def test_adaptive_zero_optimum_cap_and_invalid_epsilon(self):
+        op = PaddedFFT(np.ones((10, 11)), self.shape, self.pad, torch.float64)
+        _, zero, _ = solve_torch(torch.zeros_like(self.b), op, .1, method='ista')
+        self.assertEqual(zero[-1]['iteration'], 0)
+        self.assertTrue(zero[-1]['converged'])
+        _, limited, _ = solve_torch(self.b, op, .1, method='ista', initial='zero',
+                                     epsilon=1e-12, max_iterations=1)
+        self.assertEqual(limited[-1]['stop_reason'], 'safety_limit')
+        self.assertFalse(limited[-1]['converged'])
+        for epsilon in (0., -1., 1., float('nan'), float('inf')):
+            with self.assertRaises(ValueError):
+                solve_torch(self.b, op, .1, method='ista', epsilon=epsilon)
+
     def test_weight_and_threshold_gradients_against_finite_differences(self):
         model = ConvLISTA(self.h, self.shape, self.pad, .1, layers=3,
                           kernel_size=3, dtype=torch.float64)

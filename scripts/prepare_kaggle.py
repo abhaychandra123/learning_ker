@@ -28,7 +28,7 @@ def notebook():
 
 No internet download of raw data or external model weights is required. The bundle contains only the six needed cached arrays, scripts and tests. It retains the original metadata, which lists additional heights that are not included in the bundle.
 
-The original `deblur.py` is unchanged. The separate scripts can also run outside this notebook. Full equations and limitations are in `LISTA_FISTA.md` inside the bundle.''')
+ISTA/FISTA stop at a configurable epsilon; LISTA retains its trained depth. The scripts can also run outside this notebook. Full equations and limitations are in `LISTA_FISTA.md` inside the bundle.''')
 
     md('''## Mathematical contract
 
@@ -103,11 +103,13 @@ Tests check adjoints, dense reference updates, a known L1 solution, ISTA equival
                cwd=WORK, check=True)
 """)
 
-    md('''## Explicit experiment configuration
+    md('''## Experiment configuration and convergence tolerance
 
 These are editable starting settings, not claimed optimal parameters. Train whole images to preserve the exact forward operator. Shared 9×9 corrections and one shared threshold give 163 learned parameters. Gradient checkpointing reduces activation memory by recomputing layers during backpropagation.
 
-Training uses two GPUs, while **all inference timing uses GPU 0** so hardware is identical across methods. Each latency is a warmed, synchronized median for the batch of three images. Separate training time is also recorded. No half-precision FFT or TF32 is used.
+ISTA/FISTA run until each component's proximal-gradient RMS is at most `EPSILON` times its initial value. The check runs every update and does not use ground truth. `EPSILON=1e-3` means a 1000-fold residual reduction. Actual iterations and stop reasons are saved. An internal 100,000-update safety cap or numerical stagnation is reported as **not converged**. `RECORD_EVERY` only controls history sampling. `LAYERS` remains LISTA's trained architecture depth; `EPOCHS` controls supervised training.
+
+Training uses two GPUs, while **all inference timing uses GPU 0** so hardware is identical across methods. Each latency is a warmed, synchronized median for the batch of three images; adaptive ISTA/FISTA timing includes convergence checks. Separate training time is also recorded. No half-precision FFT or TF32 is used.
 
 The global field scale is recorded, and the L1 parameter is divided by that scale internally. This preserves the physical-unit ISTA/FISTA objective. `INITIAL='blurred'` matches the existing repository; use `'zero'` to change all methods together.''')
 
@@ -118,7 +120,7 @@ LAYERS = 8
 CORRECTION_KERNEL_SIZE = 9
 EPOCHS = 200
 LEARNING_RATE = 1e-4
-BASELINE_ITERATIONS = 200
+EPSILON = 1e-3  # 10E-4 = 0.001; ISTA/FISTA relative stationarity tolerance
 INITIAL = 'blurred'
 NUM_GPUS = 2
 SEED = 0
@@ -139,7 +141,7 @@ This is the computationally intensive cell. It fits H once, checks untrained LIS
     '--z', str(Z_TARGET), '--pad', str(PAD), '--lambda-ista', str(LAMBDA_UT),
     '--layers', str(LAYERS), '--kernel-size', str(CORRECTION_KERNEL_SIZE),
     '--epochs', str(EPOCHS), '--lr', str(LEARNING_RATE),
-    '--baseline-iterations', str(BASELINE_ITERATIONS), '--initial', INITIAL,
+    '--epsilon', str(EPSILON), '--initial', INITIAL,
     '--device', 'cuda', '--gpus', str(NUM_GPUS), '--seed', str(SEED),
     '--record-every', str(RECORD_EVERY), '--benchmark-repeats', str(BENCHMARK_REPEATS),
     '--checkpoint-layers']
@@ -152,23 +154,16 @@ print(results['evaluation'])
 print('Best training epoch:', results['best_training_epoch'])
 print('Training seconds:', results['training_seconds_including_post_update_evaluation'])
 print('Parameter changes:', results['learned_parameter_change_l2'])
-rows = []
-for method, entry in results['comparisons'].items():
-    for component, score in zip(results['components'], entry['metrics']):
-        rows.append({'method': method, 'component': component,
-            'range NRMSE (%)': None if score['nrmse_range'] is None else 100*score['nrmse_range'],
-            'relative L2 (%)': None if score['relative_l2'] is None else 100*score['relative_l2'],
-            'RMSE (uT)': score['rmse_uT'], 'L1 objective': score['objective'],
-            'stationarity RMS (uT)': score['pg_rms_uT'],
-            'median batch inference (s)': entry['inference']['median_seconds']})
-table = pd.DataFrame(rows)
+for method, status in results['baselines'].items():
+    print(method.upper(), status['iterations'], 'updates:', status['stop_reason'],
+          'relative PG=', status['relative_pg_max'])
+table = pd.read_csv(RUN_DIR / 'comparison_table.csv')
 display(table)
-table.to_csv(RUN_DIR / 'comparison_table.csv', index=False)
 ''')
 
     md('''## Inspect results before interpreting speed
 
-Compare equal-depth entries (`ista_8`, `fista_8`, `lista` with defaults) and the longer runs separately. A learned layer has more operations than an ISTA step. Low supervised reconstruction error does not imply low L1 objective, and low objective does not necessarily imply better agreement with the noisy reference. The plotted intermediate LISTA layers were not individually supervised. All scores here are in-sample.''')
+Compare equal-depth entries (`ista_8`, `fista_8`, `lista` with defaults) and epsilon-stopped entries (`ista_to_epsilon`, `fista_to_epsilon`) separately. The table includes actual `iterations` and separate LISTA `trained_layers`; reconstruction titles, convergence legends, and latency labels also show counts. Always inspect each stopping reason; a safety/stagnation exit is not convergence. A learned layer has more operations than an ISTA step. Low supervised reconstruction error does not imply low L1 objective, and low objective does not necessarily imply better agreement with the noisy reference. The plotted intermediate LISTA layers were not individually supervised. All scores here are in-sample.''')
     code('''from IPython.display import Image, display
 for filename in ('reconstructions.png', 'convergence.png', 'training_and_latency.png'):
     display(Image(filename=str(RUN_DIR / filename)))
@@ -207,7 +202,8 @@ def main():
     names = ['deblur.py', 'fields.py', 'propagator.py', 'iterative.py', 'fista.py',
              'torch_inverse.py', 'lista.py', 'compare_lista.py', 'plot_comparison.py']
     paths = [ROOT/'scripts'/name for name in names]
-    paths += sorted((ROOT/'tests').glob('test_*.py'))
+    # Bundle only tests for this workflow; crop experiments have separate dependencies.
+    paths += [ROOT/'tests'/name for name in ('test_iterative.py', 'test_lista.py')]
     paths += [ROOT/'cache'/'grid.json', ROOT/'LISTA_FISTA.md', ROOT/'requirements-lista.txt', output]
     paths += [ROOT/'cache'/f'z{z:04.1f}_{c}.npy' for z in (.5, 3.) for c in ('Bx','By','Bz')]
     manifest = {'experiment': 'same coil z=3 to 0.5, supervised physics-preserving ConvLISTA',

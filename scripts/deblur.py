@@ -33,7 +33,7 @@ kernel-estimation regularization (no Wiener/Tikhonov term). The only
 regularization is the L1 ISTA penalty.
 
 Usage:
-    python scripts/deblur.py --z 3.0 --comp Bz --n_iter 50 --lambda_ista 1e-4 --pad 32
+    python scripts/deblur.py --z 3.0 --comp Bz --epsilon 1e-3 --lambda_ista 1e-4 --pad 32
     python scripts/deblur.py --z 5.0 --comp Bz
     python scripts/deblur.py --z 3.0
 """
@@ -42,6 +42,8 @@ import sys
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parent))
 
 import argparse
+import csv
+import json
 import numpy as np
 import matplotlib
 matplotlib.use("Agg")
@@ -122,44 +124,17 @@ def soft_threshold(x, threshold):
     return np.sign(x) * np.maximum(np.abs(x) - threshold, 0.0)
 
 
-def deblur_ista(blurred, K_hat, lambda_ista, n_iter=100, pad=32):
-    """Standard ISTA for L1-regularized deconvolution.
-
-    v_t = s_t - (1/L) * A^T(A(s_t) - b)
-    s_{t+1} = soft_threshold(v_t, lambda_ista / L)
-    """
-    blurred = np.asarray(blurred, dtype=np.float64)
-    L = float(np.max(np.abs(K_hat) ** 2))
-    if not np.isfinite(L) or L <= 0:
-        raise ValueError(f"Invalid Lipschitz constant L={L}; check K_hat.")
-    step = 0.99 / L
-
-    s = blurred.copy()
-    history = []
-
-    for it in range(n_iter):
-        prediction = forward_operator(s, K_hat, pad)
-        residual = prediction - blurred
-        gradient = adjoint_operator(residual, K_hat, pad)
-
-        v = s - step * gradient
-        s = soft_threshold(v, lambda_ista * step)
-
-        prediction = forward_operator(s, K_hat, pad)
-        data_term = 0.5 * np.sum((prediction - blurred) ** 2)
-        l1_term = lambda_ista * np.sum(np.abs(s))
-        total_cost = data_term + l1_term
-
-        if it % 10 == 0 or it == n_iter - 1:
-            history.append({
-                "iter": it,
-                "data": data_term,
-                "l1": l1_term,
-                "cost": total_cost,
-            })
-            print(f"    iter {it:4d}  data={data_term:.6e}  l1={l1_term:.6e}  cost={total_cost:.6e}")
-
-    return s, history
+def deblur_ista(blurred, K_hat, lambda_ista, n_iter=None, pad=32, *, epsilon=1e-3):
+    """ISTA to relative proximal-gradient tolerance (fixed n_iter for old API tests)."""
+    from iterative import solve_l1
+    result, rows = solve_l1(blurred, K_hat, lambda_ista, method="ista",
+                            n_iter=n_iter, pad=pad, epsilon=epsilon)
+    for row in rows:
+        row.update(iter=row["iteration"], cost=row["objective"])
+    last = rows[-1]
+    print(f"    ISTA {last['stop_reason']}: {last['iteration']} updates, "
+          f"relative residual={last['relative_pg']:.6g}, epsilon={epsilon:g}")
+    return result, rows
 
 
 def nrmse(predicted, actual):
@@ -172,11 +147,16 @@ def main():
     parser.add_argument("--z", type=float, default=3.0)
     parser.add_argument("--comp", type=str, default=None,
                         help="Single component, or omit for all three")
-    parser.add_argument("--n_iter", type=int, default=100)
+    parser.add_argument("--epsilon", type=float, default=1e-3,
+                        help="relative proximal-gradient tolerance (default: 0.001)")
     parser.add_argument("--lambda_ista", type=float, default=1e-4)
     parser.add_argument("--pad", type=int, default=32)
     args = parser.parse_args()
 
+    if not np.isfinite(args.epsilon) or not 0 < args.epsilon < 1:
+        parser.error("epsilon must be finite and strictly between 0 and 1")
+
+    F.FIGURES.mkdir(parents=True, exist_ok=True)
     grid = F.grid()
     dx = grid.dx
     z_target = args.z
@@ -211,7 +191,7 @@ def main():
 
         deblurred, history = deblur_ista(
             blurred, K_hat, args.lambda_ista,
-            n_iter=args.n_iter, pad=args.pad
+            epsilon=args.epsilon, pad=args.pad
         )
 
         err = nrmse(deblurred, ground_truth)
@@ -225,6 +205,26 @@ def main():
             "forward_nrmse": forward_err,
             "history": history,
         }
+
+    summary = [{"component": comp,
+                "iterations": all_results[comp]["history"][-1]["iteration"],
+                "converged": all_results[comp]["history"][-1]["converged"],
+                "stop_reason": all_results[comp]["history"][-1]["stop_reason"],
+                "epsilon": args.epsilon,
+                "relative_pg": all_results[comp]["history"][-1]["relative_pg"],
+                "forward_nrmse_range": all_results[comp]["forward_nrmse"],
+                "reconstruction_nrmse_range": all_results[comp]["nrmse"]} for comp in comps]
+    prefix = F.FIGURES / f"deblur_ista_l1_z{z_target:g}"
+    prefix.with_name(prefix.name+"_metrics.json").write_text(json.dumps({
+        "algorithm": "ISTA", "config": vars(args), "summary": summary,
+        "history": {comp: all_results[comp]["history"] for comp in comps}}, indent=2, allow_nan=False))
+    with prefix.with_name(prefix.name+"_summary.csv").open("w", newline="") as stream:
+        writer = csv.DictWriter(stream, fieldnames=list(summary[0]))
+        writer.writeheader(); writer.writerows(summary)
+
+    def stop_label(result):
+        last = result["history"][-1]
+        return f"{last['iteration']} updates; {last['stop_reason']}"
 
     # ---- FIGURE 1: comparison (blurred, ground truth, deblurred, residual) ----
     n_comp = len(comps)
@@ -241,7 +241,7 @@ def main():
         for j, (img, title) in enumerate([
             (r["blurred"], f"Blurred {comp} (z={z_target})"),
             (r["ground_truth"], f"Ground truth {comp} (z={REF_Z})"),
-            (r["deblurred"], f"ISTA (L1) {comp} (NRMSE={r['nrmse'] * 100:.2f}%)"),
+            (r["deblurred"], f"ISTA (L1) {comp} (NRMSE={r['nrmse'] * 100:.2f}%)\n{stop_label(r)}"),
         ]):
             ax = axes[i, j]
             ax.imshow(img, origin="lower", extent=extent, cmap="RdBu_r",
@@ -265,7 +265,7 @@ def main():
 
     fig.suptitle(f"ISTA (L1) deblurring: z={z_target} -> z={REF_Z}, "
                  f"lambda_ista={args.lambda_ista:.2e}, pad={args.pad}, "
-                 f"n_iter={args.n_iter}", fontsize=12)
+                 f"epsilon={args.epsilon:g}", fontsize=12)
     fig.savefig(F.FIGURES / f"deblur_ista_l1_z{z_target:.0f}.png",
                 bbox_inches="tight", dpi=130)
     plt.close(fig)
@@ -289,7 +289,7 @@ def main():
         for j, (img, title) in enumerate([
             (r["blurred"], f"Blurred {comp} (z={z_target})"),
             (r["ground_truth"], f"Ground truth (z={REF_Z})"),
-            (r["deblurred"], f"ISTA (L1) ({r['nrmse'] * 100:.2f}%)"),
+            (r["deblurred"], f"ISTA (L1) ({r['nrmse'] * 100:.2f}%)\n{stop_label(r)}"),
         ]):
             ax = axes[i, j]
             ax.imshow(img[sl], origin="lower", extent=ext_crop, cmap="RdBu_r",
@@ -307,30 +307,31 @@ def main():
     plt.close(fig)
     print(f"Saved figures/deblur_ista_l1_z{z_target:.0f}_zoom.png")
 
-    # ---- FIGURE 3: convergence ----
-    comp0 = comps[0]
-    history = all_results[comp0]["history"]
-    if history:
-        fig, axes = plt.subplots(1, 2, figsize=(12, 4), constrained_layout=True)
-        iters = [h["iter"] for h in history]
-
-        axes[0].plot(iters, [h["data"] for h in history], "b-o", ms=3)
-        axes[0].set_xlabel("iteration")
-        axes[0].set_ylabel("0.5 ||A(s)-b||^2")
-        axes[0].set_title("Data fidelity term")
-        axes[0].grid(True, alpha=0.3)
-
-        axes[1].plot(iters, [h["cost"] for h in history], "k-o", ms=3)
-        axes[1].set_xlabel("iteration")
-        axes[1].set_ylabel("0.5 ||A(s)-b||^2 + lambda_ista ||s||_1")
-        axes[1].set_title("Total objective")
-        axes[1].grid(True, alpha=0.3)
-
-        fig.suptitle(f"ISTA (L1) convergence ({comp0}, {args.n_iter} iterations)", fontsize=12)
-        fig.savefig(F.FIGURES / f"deblur_ista_l1_z{z_target:.0f}_convergence.png",
-                    bbox_inches="tight", dpi=130)
-        plt.close(fig)
-        print(f"Saved figures/deblur_ista_l1_z{z_target:.0f}_convergence.png")
+    # ---- FIGURE 3: every component's actual stopping iteration ----
+    fig, axes = plt.subplots(n_comp, 3, figsize=(17, 4*n_comp),
+                             constrained_layout=True, squeeze=False)
+    for row, comp in enumerate(comps):
+        history = all_results[comp]["history"]
+        iters = [h["iteration"] for h in history]
+        label = f"{comp}: {stop_label(all_results[comp])}"
+        for col, (key, ylabel) in enumerate([
+                ("data", "0.5 ||A(s)-b||²"), ("cost", "L1 objective"),
+                ("relative_pg", "PG RMS / initial PG RMS")]):
+            values = [h[key] for h in history]
+            ax = axes[row, col]
+            ax.plot(iters, values, "o-", ms=3, label=label)
+            ax.scatter([iters[-1]], [values[-1]], s=35, zorder=3)
+            ax.set(xlabel="Completed updates", ylabel=ylabel, title=label)
+            ax.set_yscale("symlog", linthresh=1e-10)
+            if key == "relative_pg":
+                ax.axhline(args.epsilon, color="black", ls="--", label=f"epsilon={args.epsilon:g}")
+                ax.legend(fontsize=8)
+            ax.grid(alpha=.3)
+    fig.suptitle(f"ISTA convergence: actual update counts per component | epsilon={args.epsilon:g}")
+    fig.savefig(F.FIGURES / f"deblur_ista_l1_z{z_target:.0f}_convergence.png",
+                bbox_inches="tight", dpi=130)
+    plt.close(fig)
+    print(f"Saved figures/deblur_ista_l1_z{z_target:.0f}_convergence.png")
 
     # ---- FIGURE 4: spectra ----
     fig, axes = plt.subplots(1, n_comp, figsize=(6 * n_comp, 5),
@@ -351,7 +352,7 @@ def main():
             ax.semilogy(k_c, spec, color=color, lw=1.3, label=label)
         ax.set_xlabel("k (cycles/um)")
         ax.set_ylabel("amplitude spectrum")
-        ax.set_title(f"{comp}")
+        ax.set_title(f"{comp}: {stop_label(r)}")
         ax.legend(fontsize=8)
         ax.set_xlim(0, 1.5)
 
@@ -365,11 +366,12 @@ def main():
     print(f"\n{'=' * 70}")
     print(f"ISTA (L1) Deblurring Summary (z={z_target} -> z={REF_Z})")
     print(f"{'=' * 70}")
-    print(f"{'Component':>10}  {'Forward NRMSE':>16}  {'Reconstruction NRMSE':>22}")
+    print(f"{'Component':>10}  {'Updates':>8}  {'Stop reason':>22}  {'Forward NRMSE':>16}  {'Reconstruction NRMSE':>22}")
     for comp in comps:
         fw = all_forward_nrmse[comp]
         err = all_results[comp]["nrmse"]
-        print(f"{comp:>10}  {fw * 100:15.3f}%  {err * 100:21.3f}%")
+        last = all_results[comp]["history"][-1]
+        print(f"{comp:>10}  {last['iteration']:8d}  {last['stop_reason']:>22}  {fw * 100:15.3f}%  {err * 100:21.3f}%")
     print(f"{'=' * 70}")
 
 
