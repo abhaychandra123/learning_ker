@@ -13,6 +13,19 @@ import numpy as np
 from deblur import forward_operator, adjoint_operator, soft_threshold
 
 
+def console_progress(label):
+    """Report recorded solver progress with immediate terminal flushing."""
+    started = perf_counter()
+
+    def report(row):
+        status = f"; {row['stop_reason']}" if row['stop_reason'] else ""
+        print(f"    {label}: {row['iteration']} updates | "
+              f"relative PG={row['relative_pg']:.6g} "
+              f"(target <= {row['epsilon']:g}) | "
+              f"elapsed {perf_counter()-started:.1f}s{status}", flush=True)
+    return report
+
+
 def validate_problem(blurred, K_hat, lam, pad):
     b = np.asarray(blurred, dtype=np.float64)
     h = np.asarray(K_hat, dtype=np.complex128)
@@ -66,7 +79,7 @@ def validate_stopping(epsilon, n_iter, max_iterations):
 
 def solve_l1(blurred, K_hat, lam, *, method, epsilon=DEFAULT_EPSILON,
              pad=32, initial="blurred", record_every=10, truth=None,
-             n_iter=None, max_iterations=SAFETY_MAX_ITERATIONS):
+             n_iter=None, max_iterations=SAFETY_MAX_ITERATIONS, progress=None):
     """ISTA/FISTA until RMS(G(x))/RMS(G(x0)) <= epsilon.
 
     G(x) = (x - soft(x-step*A*(Ax-b), step*lam))/step. Check every
@@ -74,6 +87,7 @@ def solve_l1(blurred, K_hat, lam, *, method, epsilon=DEFAULT_EPSILON,
     The internal safety limit/stagnation exit is NOT reported as convergence.
     Explicit n_iter is retained only for fixed-depth reference tests and LISTA
     initialization comparisons; user-facing CLIs expose epsilon instead.
+    Optional progress(row) receives each recorded diagnostic, including start/end.
     """
     b, h, bound = validate_problem(blurred, K_hat, lam, pad)
     validate_stopping(epsilon, n_iter, max_iterations)
@@ -114,6 +128,8 @@ def solve_l1(blurred, K_hat, lam, *, method, epsilon=DEFAULT_EPSILON,
                    epsilon=epsilon, converged=bool(adaptive and relative <= epsilon),
                    stop_reason=reason, safety_max_iterations=max_iterations)
         history.append(row)
+        if progress is not None:
+            progress(dict(row))
 
     reason = "converged" if adaptive and relative <= epsilon else ("fixed_budget" if n_iter == 0 else None)
     record(0, reason)

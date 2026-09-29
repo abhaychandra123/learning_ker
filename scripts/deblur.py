@@ -126,9 +126,12 @@ def soft_threshold(x, threshold):
 
 def deblur_ista(blurred, K_hat, lambda_ista, n_iter=None, pad=32, *, epsilon=1e-3):
     """ISTA to relative proximal-gradient tolerance (fixed n_iter for old API tests)."""
-    from iterative import solve_l1
+    from iterative import solve_l1, console_progress
+    print(f"    Starting ISTA; stopping at relative PG <= {epsilon:g}. "
+          "Progress every 10 updates.", flush=True)
     result, rows = solve_l1(blurred, K_hat, lambda_ista, method="ista",
-                            n_iter=n_iter, pad=pad, epsilon=epsilon)
+                            n_iter=n_iter, pad=pad, epsilon=epsilon,
+                            progress=console_progress("ISTA"))
     for row in rows:
         row.update(iter=row["iteration"], cost=row["objective"])
     last = rows[-1]

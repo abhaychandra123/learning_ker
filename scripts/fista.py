@@ -17,7 +17,7 @@ import numpy as np
 
 import fields as F
 from deblur import learn_kernel_joint
-from iterative import solve_l1
+from iterative import solve_l1, console_progress
 
 
 def deblur_fista(blurred, K_hat, lambda_ista, n_iter=None, pad=32, **kwargs):
@@ -58,7 +58,8 @@ def main():
             continue
         x, history = deblur_fista(
             blurred, h, args.lambda_ista, pad=args.pad, epsilon=args.epsilon,
-            initial=args.initial, record_every=args.record_every, truth=sharp)
+            initial=args.initial, record_every=args.record_every, truth=sharp,
+            progress=console_progress(f"FISTA {c}"))
         np.save(args.output / f"reconstruction_{c}.npy", x)
         results[c] = history
         print(c, json.dumps(history[-1]))
