@@ -27,7 +27,9 @@ def deblur_fista(blurred, K_hat, lambda_ista, n_iter=None, pad=32, **kwargs):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--z", type=float, required=True)
+    parser.add_argument("--z", type=float, default=3.)
+    parser.add_argument("--replot", action="store_true",
+                        help="build visual report from saved output without rerunning FISTA")
     parser.add_argument("--comp", choices=F.SIGNED, default=None)
     parser.add_argument("--epsilon", type=float, default=1e-3,
                         help="relative proximal-gradient tolerance (default: 0.001)")
@@ -37,6 +39,10 @@ def main():
     parser.add_argument("--record-every", type=int, default=10)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
+    if args.replot:
+        from fista_report import render_report
+        render_report(args.output)
+        return
     if args.z <= 0.5 or args.z not in F.z_values():
         parser.error("z must be an available primary-cache height above 0.5")
     if args.pad < 0 or args.record_every < 1:
@@ -111,6 +117,8 @@ def main():
         "summary": summary,
     }
     (args.output / "metrics.json").write_text(json.dumps(manifest, indent=2, allow_nan=False))
+    from fista_report import render_report
+    render_report(args.output)
     print(f"Saved {args.output}")
 
 

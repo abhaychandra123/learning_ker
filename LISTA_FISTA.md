@@ -100,7 +100,7 @@ The proximal-gradient mapping is `(x-soft(x-alpha*grad J_data,alpha*lambda))/alp
 
 ## Files and use
 
-- `scripts/fista.py`: standalone NumPy FISTA, with saved reconstruction, kernel and JSON metadata.
+- `scripts/fista.py`: standalone NumPy FISTA, with saved reconstruction, kernel and JSON metadata, plus an automatic HTML visual report from `scripts/fista_report.py`.
 - `scripts/iterative.py`: shared comparable NumPy ISTA/FISTA and objective/stationarity diagnostics.
 - `scripts/torch_inverse.py`: batched differentiable padded operator and GPU ISTA/FISTA.
 - `scripts/lista.py`: `ConvLISTA`, checkpoint loading, and standalone training CLI.
@@ -160,3 +160,11 @@ The loader restores the original double-fit norm bound rather than recomputing i
 Local checks pass for: padded adjoint against an explicit matrix transpose; FFT operator/autograd against NumPy; ISTA equivalence to existing code; FISTA against an explicit-matrix recurrence and an exact L1 solution; all-layer LISTA initialization equivalence; learned weight/threshold gradients against finite differences; physical-unit normalization; checkpointed versus ordinary gradients; training loss/weight updates; and checkpoint round-trip output equality.
 
 The two-CUDA-device gradient-weighting check is included and runs in the Kaggle notebook; it is skipped locally because CUDA is unavailable. Convergence tests additionally check known solutions, NumPy/PyTorch stopping parity, unit scaling, logging independence, stricter tolerances, initial optima, and honest safety-limit reporting. Saved historical Kaggle runs in `notebooks/runs_results` use fixed 200/500-update baselines; they are preserved and are not results of the new epsilon-stopped protocol. Local synthetic checks verify implementation, not full-data performance.
+
+Standalone FISTA now writes `index.html` with input pairs, kernel impulse/transfer plots, reconstructions, forward residuals, profiles, spectra and convergence. Regenerate from saved arrays without rerunning the solver:
+
+```bash
+python scripts/fista.py --replot --output runs/fista_z3
+```
+
+When primary-cache heights 0.5, 1 and 2 µm are present, the report also performs a separate forward height holdout: fit the joint kernel on 0.5→1, apply the padded operator three times, and score the unseen z=2 plane. It compares against one padded analytic propagation over 1.5 µm. Padding/cropping occurs at every learned step; finite-window effects remain. This is a kernel generalization diagnostic, not an inverse FISTA holdout. Reconstruction remains a same-sample experiment. Holdout metrics, predictions, step kernel and report provenance are saved separately from the original solver metrics. A two-height Kaggle bundle lacks the holdout planes and explicitly reports that the holdout is unavailable.

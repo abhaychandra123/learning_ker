@@ -199,7 +199,7 @@ def main():
     output = ROOT/'notebooks'/'ISTA_LISTA_FISTA_Kaggle.ipynb'
     output.parent.mkdir(exist_ok=True)
     output.write_text(json.dumps(notebook(), indent=1, ensure_ascii=False)+'\n')
-    names = ['deblur.py', 'fields.py', 'propagator.py', 'iterative.py', 'fista.py',
+    names = ['deblur.py', 'fields.py', 'propagator.py', 'iterative.py', 'fista.py', 'fista_report.py',
              'torch_inverse.py', 'lista.py', 'compare_lista.py', 'plot_comparison.py']
     paths = [ROOT/'scripts'/name for name in names]
     # Bundle only tests for this workflow; crop experiments have separate dependencies.
