@@ -1,0 +1,194 @@
+\appendix
+\section{Implementation map for the current repository}
+\label{sec:implementation}
+\subsection{What can be reused}
+\begin{tabularx}{\linewidth}{P{51mm}Y}
+\toprule Existing file/area & Reuse and required distinction\\\midrule
+\texttt{scripts/propagator.py} & Physical frequency convention and analytic transfer; extend observation modelling in a separate experiment.\\
+\texttt{scripts/iterative.py} & Comparable ISTA/FISTA, objective/stationarity diagnostics, epsilon stopping, honest stop reasons.\\
+\texttt{scripts/torch\_inverse.py} & FFT mechanics and adjoint checks; current transfer is fixed and single-channel, so a dynamic height operator needs a new implementation.\\
+\texttt{scripts/lista.py} & Initialization-equivalent learned corrections, tied weights, checkpoint patterns, trained-depth semantics.\\
+\texttt{scripts/compare\_lista.py} & Training/timing/provenance patterns; replace same-sample kernel fitting, truth-derived scaling, and training-only selection in the new benchmark.\\
+\texttt{tests/} & Existing numerical checks; extend only where new operator contracts, derivatives, projections, and sampling change.\\
+Crop and lambda reports & Useful diagnostics and historical experiments; direct periodic crops are not a replacement for the new finite-window benchmark.\\\bottomrule
+\end{tabularx}
+Retain archived outputs. The proposed work is a new protocol and should not be compared as if old fixed-iteration, empirical-kernel, same-sample runs used the same observation information. The existing COMSOL cache naming does not encode geometry identity; the expanded database requires a different manifest/key scheme.
+
+Suggested new modules: \texttt{dataset\_manifest.py}, \texttt{observation\_model.py}, \texttt{joint\_models.py}, \texttt{train\_joint.py}, \texttt{evaluate\_joint.py}, and \texttt{report\_joint.py}. These names describe a possible future organization; this document has not created or validated that training pipeline.
+
+\subsection{A differentiable propagation fragment}
+This example handles a symmetric padded field operator only. Projection, pixel integration, unequal latent/observation support, masks, and whitening must be composed separately with their correct adjoints. It demonstrates that the transfer is computed from a tensor height without converting it to NumPy or detaching it.
+\par\noindent\begin{minipage}{\linewidth}
+\begin{lstlisting}[language=Python]
+import torch
+import torch.nn.functional as F
+
+def propagate(x, h, dx_um, z_ref_um=0.5, pad=32):
+    # x: [batch, channels, H, W], signed fields
+    # h: [batch], in um, kept in the autograd graph
+    # dx_um: common physical pitch for this batch
+    H0, W0 = x.shape[-2:]
+    xp = F.pad(x, (pad, pad, pad, pad)) if pad else x
+    ny, nx = xp.shape[-2:]
+    fy = torch.fft.fftfreq(ny, d=dx_um,
+                          device=x.device, dtype=x.dtype)
+    fx = torch.fft.fftfreq(nx, d=dx_um,
+                          device=x.device, dtype=x.dtype)
+    freq = torch.sqrt(fy[:, None]**2 + fx[None, :]**2)
+    gap = (h - z_ref_um).reshape(-1, 1, 1, 1)
+    transfer = torch.exp(-2 * torch.pi * gap * freq)
+    out = torch.fft.ifft2(torch.fft.fft2(xp) * transfer).real
+    return out[..., pad:pad + H0, pad:pad + W0]
+
+# Validate positive gaps and pitch in the caller.
+# Cache frequency grids by shape/pitch/device/dtype, not H(h).
+# Different dx and dy require separate frequency spacings.
+\end{lstlisting}
+\end{minipage}\par
+For the same real radial transfer and symmetric support, the adjoint has the same pad/convolve/crop form. That statement does not extend automatically to arbitrary $\C$, $\Samp$, or $\mathcal Q$; their adjoints must insert residuals, transpose averaging, and transpose projection in reverse order. Check the implemented operator rather than assuming a transpose from its diagram.
+
+\subsection{A split-aware training skeleton}
+\begin{lstlisting}[language=Python]
+for batch in train_loader:
+    y, truth, h_true, metadata = batch
+    # metadata contains only information allowed at inference
+    x_hat, h_hat = model(y, metadata)
+    y_hat = observation_model(x_hat, h_hat, metadata)
+    loss = field_loss(x_hat, truth)
+    loss += weight_h * height_loss(h_hat, h_true)
+    loss += weight_obs * observation_loss(y_hat, y, metadata)
+    optimizer.zero_grad()
+    loss.backward()
+    optimizer.step()
+
+# Select checkpoints using held-out validation sources.
+# Fit uncertainty calibration on a separate calibration split.
+# Evaluate the locked source/session test split after selection.
+\end{lstlisting}
+The fragment is conceptual. It does not specify a novel architecture, justify the noise likelihood, or guarantee convergence. Simulation height labels are training supervision; never substitute true test height for a predicted estimate in the unknown-height result.
+
+\clearpage
+\section{Practical records and templates}
+\subsection{Scene manifest example}
+\par\noindent\begin{minipage}{\linewidth}
+\begin{lstlisting}
+geometry_id: cad_hash_or_stable_layout_id
+scene_id: geometry_drive_mesh_id
+source_family: spiral_or_other_declared_family
+source_plane_definition: conductor_top_surface
+reference_height_um: 0.5
+observation_height_um: 3.0
+height_label_kind: exact_simulation_coordinate
+height_uncertainty_um: 0.0
+dx_um: 0.1
+dy_um: 0.1
+field_quantity: B
+field_unit: T
+components: [Bx, By, Bz]
+current_A: measured_or_prescribed_value
+grid_shape: [ny, nx]
+simulation_mesh_id: mesh_hash
+split_group: geometry_id_or_template_family
+parent_scene: full_physical_scene_id
+observation_transform: sensing_then_crop_version
+acquisition_session: null_for_simulation
+\end{lstlisting}
+\end{minipage}\par
+This example uses existing project units and a sample height pair. It is not a claim that every external database entry has those values. An experimental manifest should add NV axis, stage increments, absolute-height calibration method, raw-data references, lock-in/ODMR settings, drive logs, and measurement covariance identifiers.
+
+\subsection{Experiment card}
+\begin{tcolorbox}
+\textbf{ID and question:}\quad E\_\_\_ / What would this experiment establish?\par
+\textbf{Hypothesis and falsifier:}\quad What outcome would reject the explanation?\par
+\textbf{Inputs at inference:}\quad Height? CAD? dictionary? projection? pitch?\par
+\textbf{Data and split:}\quad Source groups, acquisition sessions, manifest hashes.\par
+\textbf{Method/control:}\quad One change; matched prior/data/compute.\par
+\textbf{Primary endpoint:}\quad Field, height, resolution, or reliability criterion.\par
+\textbf{Secondary diagnostics:}\quad Residual maps, profiles, spectra, timing.\par
+\textbf{Result and uncertainty:}\quad Source-level effect size and confidence interval.\par
+\textbf{Decision:}\quad Keep, reject, investigate physics, or acquire missing data.
+\end{tcolorbox}
+
+\subsection{First 10 working days}
+\begin{enumerate}
+\item Days 1--2: inventory the existing COMSOL database; define source identities, height origin, units, and available targets. Request the experimental archive and logs.
+\item Days 3--4: freeze a pilot split; validate analytical propagation, adjoints, and height derivatives against small cases and several COMSOL pairs.
+\item Days 5--6: produce known-height classical reconstructions and the wrong-height sweep. Examine boundary and spectral errors.
+\item Days 7--8: form source--height lookalike pairs; vary source size/current independently. Write the ambiguity diagnosis.
+\item Days 9--10: train a small known-height learned baseline or height predictor, depending on the diagnosis; draft the one-page next-experiment argument.
+\end{enumerate}
+The timetable assumes the COMSOL files can be read and paired. If the audit reveals inconsistent coordinates or missing targets, those corrections become the first milestone. Do not start a month-long training campaign before the input contract is trusted.
+
+\subsection{Failure triage}
+\begin{tabularx}{\linewidth}{P{42mm}Y}
+\toprule Symptom & First investigation\\\midrule
+Height runs to a bound & Non-identifiability, amplitude scaling, prior bias, sign of height derivative\\
+Residual improves; truth worsens & Regularization, unstable frequencies, wrong model, invalid height information\\
+Crop seams or edge rings & Periodic assumption, source outside FOV, padding/support mismatch\\
+Wrong amplitudes/signs & Units, normalization, NV projection, current sign, final activation\\
+Good simulations; poor real maps & Registration, covariance, optical/NV averaging, raw readout artifacts\\
+Uncertainty always tiny & Calibration leakage, narrow training family, unjustified likelihood, branch collapse\\
+Uncertainty always broad & Poor scores, insufficient information, candidate spacing, untrained prior\\
+Joint model loses to two-stage & Weak control tuning, noisy height updates, redundant mechanism, excessive complexity\\\bottomrule
+\end{tabularx}
+
+\subsection{A final claim audit}
+Before submission, ask whether the novelty is an algorithm, an uncertainty method, an observation model, or an experimental capability. State what was given at inference and what was estimated. Describe which fine features were validated independently, which depend on priors, and whether the height reference is absolute or relative. Make ``unseen geometry'' mean excluded physical identities, not new crops of the same coil. Make ``super-resolution'' mean a defined physical detail-recovery result, not a larger tensor.
+
+\section{Focused reading and questions for collaborators}
+\subsection{Read with an implementation target}
+\begin{enumerate}
+\item \textbf{LISTA and ALISTA:} derive the layer from a proximal iteration and reproduce initialization equivalence~\cite{lista,alista}.
+\item \textbf{U-Net and FiLM:} build a multiscale signed-field baseline, then test a single metadata-conditioning change~\cite{unet,film}.
+\item \textbf{MoDL/VarNet:} implement exact data consistency for this observation model instead of copying the MRI encoding~\cite{modl,varnet}.
+\item \textbf{QDM current reconstruction:} identify the actual observation components, priors, and standoff/noise comparisons~\cite{midha,reed,broadway}.
+\item \textbf{Bathla dictionary work:} reproduce the available-data task and distinguish coefficient sparsity from field-pixel sparsity~\cite{bathla}.
+\item \textbf{Joint calibration and Bayesian source inference:} map which assumptions stabilize the inverse~\cite{setescak,clement,blinddps}.
+\item \textbf{Calibration:} implement coverage and selective-risk evaluation before adding a more complex posterior network~\cite{guo,conformal}.
+\end{enumerate}
+
+\subsection{Questions to resolve when the hard disk arrives}
+\begin{itemize}
+\item Which maps are raw measurements, fitted fields, averaged references, or dictionary reconstructions?
+\item Are all original basis maps and activation/drive labels available, and are actual currents recorded?
+\item Are there repeated acquisitions, current-off data, raw fit residuals, and timestamps?
+\item Were heights independently calibrated, or estimated by a model? Which coordinate is the origin?
+\item Which coils and layer depths are known, and which CAD variants have corresponding COMSOL models?
+\item Do the archive's measurements include a usable closer-plane reference, or should we acquire one?
+\item Which arrays/sessions can be withheld for adaptation, calibration, and final testing?
+\end{itemize}
+These questions are operational metadata requirements. They do not require changing the agreed primary target or delaying the simulation pilot.
+
+\begingroup\small
+\begin{thebibliography}{99}
+\setlength{\itemsep}{3pt}
+\setlength{\parskip}{0pt}
+\bibitem{lista} K. Gregor and Y. LeCun. \emph{Learning Fast Approximations of Sparse Coding}. ICML, 2010. \url{https://icml.cc/Conferences/2010/papers/449.pdf}.
+\bibitem{alista} J. Liu, X. Chen, Z. Wang, and W. Yin. \emph{ALISTA: Analytic Weights Are As Good As Learned Weights in LISTA}. ICLR, 2019. \url{https://openreview.net/forum?id=B1lnzn0ctQ}.
+\bibitem{unet} O. Ronneberger, P. Fischer, and T. Brox. \emph{U-Net: Convolutional Networks for Biomedical Image Segmentation}. 2015. \url{https://arxiv.org/abs/1505.04597}.
+\bibitem{film} E. Perez et al. \emph{FiLM: Visual Reasoning with a General Conditioning Layer}. AAAI, 2018. \url{https://arxiv.org/abs/1709.07871}.
+\bibitem{modl} H. K. Aggarwal, M. P. Mani, and M. Jacob. \emph{MoDL: Model Based Deep Learning Architecture for Inverse Problems}. IEEE Transactions on Medical Imaging, 2018. \url{https://arxiv.org/abs/1712.02862}.
+\bibitem{varnet} A. Sriram et al. \emph{End-to-End Variational Networks for Accelerated MRI Reconstruction}. 2020. \url{https://arxiv.org/abs/2004.06688}.
+\bibitem{nafnet} L. Chen et al. \emph{Simple Baselines for Image Restoration}. ECCV, 2022. \url{https://arxiv.org/abs/2204.04676}.
+\bibitem{dip} D. Ulyanov, A. Vedaldi, and V. Lempitsky. \emph{Deep Image Prior}. CVPR, 2018. \url{https://arxiv.org/abs/1711.10925}.
+\bibitem{pnp} S. V. Venkatakrishnan, C. A. Bouman, and B. Wohlberg. \emph{Plug-and-Play Priors for Model Based Reconstruction}. GlobalSIP, 2013. \url{https://brendt.wohlberg.net/publications/venkatakrishnan-2013-plugandplay.html}.
+\bibitem{fno} Z. Li et al. \emph{Fourier Neural Operator for Parametric Partial Differential Equations}. ICLR, 2021. \url{https://arxiv.org/abs/2010.08895}.
+\bibitem{blinddps} H. Chung, J. Kim, S. Kim, and J. C. Ye. \emph{Parallel Diffusion Models of Operator and Image for Blind Inverse Problems}. CVPR, 2023. \url{https://arxiv.org/abs/2211.10656}.
+\bibitem{guo} C. Guo, G. Pleiss, Y. Sun, and K. Q. Weinberger. \emph{On Calibration of Modern Neural Networks}. ICML, 2017. \url{https://arxiv.org/abs/1706.04599}.
+\bibitem{conformal} A. N. Angelopoulos and S. Bates. \emph{A Gentle Introduction to Conformal Prediction and Distribution-Free Uncertainty Quantification}. 2021. \url{https://arxiv.org/abs/2107.07511}.
+\bibitem{broadway} D. A. Broadway et al. \emph{Improved Current Density and Magnetization Reconstruction Through Vector Magnetic Field Measurements}. Physical Review Applied 14, 024076, 2020. \url{https://arxiv.org/abs/2005.06788}.
+\bibitem{midha} S. Midha et al. \emph{Optimized Current Density Reconstruction from Widefield Quantum Diamond Magnetic Field Maps}. Physical Review Applied 22, 014015, 2024. \url{https://arxiv.org/abs/2402.17781}.
+\bibitem{reed} N. R. Reed et al. \emph{Machine Learning for Improved Current-Density Reconstruction from Two-Dimensional Vector Magnetic Images}. Physical Review Applied 23, 034035, 2025. \url{https://arxiv.org/abs/2407.14553}.
+\bibitem{bathla} A. Bathla, M. Parashar, M. Markham, A. Rajwade, and K. Saha. \emph{Dictionary-Based Reconstruction of Spatio-Temporal 3D Magnetic Field Images from Quantum Diamond Microscope}. Preprint, 2025; published in Optica 13, 686--697, 2026. The archive protocol here refers to the linked preprint description. \url{https://arxiv.org/html/2506.05491v1}.
+\bibitem{setescak} A. Setescak et al. \emph{A Fourier-Space Approach to Physics-Informed Magnetization Reconstruction from Nitrogen-Vacancy Measurements}. arXiv:2602.17180v3, 2026. \url{https://arxiv.org/abs/2602.17180}.
+\bibitem{clement} C. B. Clement, J. P. Sethna, and K. C. Nowack. \emph{Reconstruction of Current Densities from Magnetic Images by Bayesian Inference}. 2021 version. \url{https://arxiv.org/abs/1910.12929}.
+\bibitem{qdsim} S. Pandey et al. \emph{QDsiM: A Noise-Aware Simulation Toolkit for Quantum Diamond Microscope}. Preprint, 2026. \url{https://arxiv.org/abs/2601.11649}.
+\bibitem{cvpr} CVPR 2027 official call for papers. Checked 8 October 2026. \url{https://cvpr.thecvf.com/Conferences/2027/CallForPapers}.
+\bibitem{iccv} ICCV 2027 official dates page. Checked 8 October 2026. \url{https://iccv.thecvf.com/Conferences/2027/Dates}.
+\bibitem{iccp} ICCP 2027 official website. Checked 8 October 2026. \url{https://iccp2027.iccp-conference.org/}.
+\bibitem{icip} IEEE Signal Processing Society ICIP listing. Checked 8 October 2026. \url{https://signalprocessingsociety.org/event-names/icip}.
+\bibitem{icassp} ICASSP 2027 official important dates. Checked 8 October 2026. \url{https://2027.ieeeicassp.org/important-dates/}.
+\bibitem{eusipco} EUSIPCO 2027 official website. Checked 8 October 2026. \url{https://eusipco2027.de/}.
+\bibitem{quantum} Optica Quantum 2.0 official call. Checked 8 October 2026. \url{https://www.optica.org/events/topical_meetings/quantum/}.
+\end{thebibliography}
+\endgroup

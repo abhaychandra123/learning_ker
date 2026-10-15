@@ -1,0 +1,102 @@
+\section{The experiment ladder: investigate before inventing}
+\label{sec:experiments}
+Each experiment should have a short configuration file, immutable split identifier, source revision, arrays, metrics, and a visual report. Work through E00--E05 first. The remaining experiments are selected by the observed failure, rather than executed as an indiscriminate architecture sweep.
+
+\subsection{E00: operator correctness and model discrepancy}
+\textbf{Question.} Does the observation operator represent the data well enough that a new network is scientifically interpretable?
+
+\textbf{Procedure.} Check Fourier-mode attenuation, identity at zero gap, nonnegative upward gaps, padding/cropping, pixel integration, component projection, and transpose ordering. Verify $\langle\mathcal M_hx,r\rangle=\langle x,\mathcal M_h^*r\rangle$ on asymmetric grids and masks. Compare the autograd derivative in $h$ with centred finite differences on a small problem. Compare independent COMSOL high-plane fields with propagated reference fields, using interior and full-FOV metrics.
+
+\textbf{Controls.} Increase physical-domain size/padding; refine one representative COMSOL mesh; compare registered coordinates. Test double precision on a small case before using GPU float32. If error changes with window size, do not call it solely simulation noise.
+
+\textbf{Output.} Adjoint/gradient errors, component residual maps, residual spectra, interior-versus-boundary error, and a model-discrepancy summary. This step is a necessary numerical verification, not a novel result by itself.
+
+\subsection{E01: known-height reconstruction}
+\textbf{Question.} What detail is recoverable when calibration is available?
+
+Run analytic filtered inversion, classical regularized reconstruction, the repository's LISTA with physics corrections, and a small supervised residual CNN or U-Net on the same source split. Use the true height only in the explicitly labelled known-height controls. Tune cutoffs and penalties on validation sources. Evaluate every component, a predefined source ROI, profiles, and latency.
+
+Compare field-pixel L1, quadratic smoothness, wavelet sparsity, and vector TV as distinct priors. For vector TV one possible definition is
+\begin{equation}
+ \R_{\rm VTV}(x)=\sum_p\sqrt{\sum_c[(D_xx_c)_p^2+(D_yx_c)_p^2]+\varepsilon_{\rm TV}^2}.
+\end{equation}
+Choose finite-difference spacing in physical units. An arbitrary CNN denoiser is not automatically a proximal operator, and its iterations do not inherit FISTA's convex convergence guarantee.
+
+\gate{If known-height methods cannot recover the target on the pilot, investigate noise, sampling, source prior, or model mismatch before introducing height estimation. A known-height control is an information reference, not a universal accuracy upper bound.}
+
+\subsection{E02: intentionally wrong height}
+\textbf{Question.} How much does calibration error affect reconstruction, and can residuals diagnose it?
+
+Select low, medium, and high heights from the actual database and multiple independent layouts. Sweep assumed height around each true value, subject to $h>z_{\rm ref}$. For an observation at $3\um$, an illustrative sweep is $2$ to $4\um$ with finer samples near $3\um$. Reconstruct to the same declared solver tolerance at each candidate. Reuse warm starts only if their effect and timing are recorded.
+
+Plot reconstruction error, whitened observation mismatch, regularization cost, and feature/profile error against assumed height. Repeat at zero noise and two specified physical noise levels. Show cases where a good residual accompanies a poor reconstruction.
+
+\textbf{Interpretation.} A broad residual valley is consistent with ambiguity; a narrow prior-dependent objective minimum does not establish true height. A monotone preference for the lowest permitted height may reflect the semigroup degeneracy. Use this experiment to set application-relevant error tolerances rather than inventing a success threshold after seeing test data.
+
+\subsection{E03: source--height ambiguity and shortcut detection}
+\textbf{Question.} Which changes in source parameters can imitate a height change?
+
+Vary source size, track width, turns, spacing, location, and current independently of height. Find nearest observation pairs from different layouts/heights using a noise-weighted distance. For Gaussian noise a likelihood comparison uses the whitened separation $\norm{\Sigma^{-1/2}(y_1-y_2)}$; interpret it under the actual covariance and sampling, not raw pixel count. Verify lookalike cases visually and using profiles.
+
+Train a minimal height predictor. Evaluate it on held-out size ranges, current amplitudes, and shape families. Compare physical units, observation-only normalization with retained amplitude, and normalization that discards amplitude. Do not discard amplitude and then conclude that it is irrelevant.
+
+\textbf{Output.} An ambiguity gallery; height error by geometry/current subgroup; predictive spread on lookalikes; and a labelled subset of informative versus weakly informative cases. These cases should remain fixed for comparing later models.
+
+\subsection{E04: the two-stage baseline}
+\textbf{Question.} Is a simple height estimator followed by reconstruction sufficient?
+
+Train a CNN encoder with global pooling and an MLP receiving physical metadata. Predict $h$ within the allowed training interval. Feed its estimate to a conditioned reconstructor trained with known heights. Evaluate a second variant in which the reconstructor is trained using noisy height estimates matching the predictor's validation errors; otherwise a brittle two-stage baseline can make joint inference look unfairly strong.
+
+Compare height MAE, field error, failure rate, and latency with the known-height counterparts. Repeat with at least several model seeds once the pilot is stable. Use the same prior capacity and training budget wherever feasible.
+
+\subsection{E05: joint field--height refinement}
+\textbf{Question.} Does feedback between calibration and reconstruction add value?
+
+Start from the two-stage initialization, then perform a small trained number of physics-and-prior refinement stages. Supervise both height and reference field on simulation data; include observation consistency. Compare (a) frozen height, (b) gradient height updates, and (c) learned residual-based height updates. Control total parameter count and inference compute, not only stage count.
+
+\textbf{Required ablations.} Same reconstruction prior; identical metadata; same dataset; matched height initialization; no-refinement model trained end to end; and a larger two-stage model under a similar compute budget. Log intermediate heights and errors to detect unstable oscillations or drift toward the bound.
+
+\gate{Advance to a novel mechanism only if there is a reproducible residual failure: ambiguity, noise amplification, scale mismatch, boundary inconsistency, or simulation-to-real mismatch. If the strong two-stage model solves the task, develop a different scientific claim instead of obscuring it with added modules.}
+
+\subsection{E06: multiple hypotheses and calibrated rejection}
+Compare one height estimate with a coarse candidate bank and a shared conditional reconstructor. Preserve associated pairs $(x_j,h_j)$ instead of mixing unrelated image and height averages. Evaluate true-height set coverage, interval/set width, conditional coverage by geometry/noise, and the error on cases retained at increasing confidence thresholds. Compare with a small ensemble and simple grid-search profiling.
+
+For discrete candidates, report the approximation error due to binning and include heights between training bins. Use a separate calibration set for temperature scaling or conformal adjustments. The ability to return broad sets is useful only when informative cases remain narrow and difficult cases are reliably flagged.
+
+\subsection{E07: FOV, pitch, and outside-window contributions}
+Use a full physical scene as the common parent. Create (i) different crops at fixed pitch, (ii) different pitches at fixed physical FOV, and (iii) different FOVs at fixed array dimensions. These are three different shifts. Integrate and antialias before subsampling. Compare on registered common physical regions with documented target-grid conversion.
+
+Test sources touching the edge and sources just outside the window. Compare zero exterior, increased latent-domain support, and an explicit nuisance exterior model. Measure interior error, edge-band error, overlap disagreement, height bias, and predictive uncertainty. Cropping a propagated image is not equivalent to propagating a crop.
+
+\subsection{E08: noise and acquisition robustness}
+Start with known white Gaussian noise as a controlled experiment, then add correlated noise, spatially varying variance, offsets, and drift estimated from real repetitions. Keep physical noise level distinct from SNR; increasing height reduces signal even if instrument noise remains fixed. Test both fixed-noise and fixed-SNR protocols, labelled separately.
+
+For repeated measurements, independent noise can support noise-to-noise denoising or adaptation, but does not by itself reveal frequencies removed by standoff. Check shared calibration noise, fitting-induced spatial correlation, and drift before assuming conditional independence. QDsiM~\cite{qdsim} provides a noise-aware measurement simulation reference; adopting a simulator alone is not a methodological novelty.
+
+\subsection{E09: COMSOL-to-experiment transfer}
+Match scalar NV projection versus vector input, units, sensor averaging, and acquisition backgrounds. Train on COMSOL, evaluate without adaptation, then compare calibration-only adaptation and learned-prior adaptation on disjoint real sessions. Include a small real-only control if independently labelled height pairs are available. Separate gains from registration/calibration improvements from gains due to the new architecture.
+
+\subsection{E10: physical resolution and prior dependence}
+Define a controlled feature family: for example two nearby track contributions, a narrow gap, or a small perturbation on a known source. Sweep separation and SNR at several heights. Define a detection or profile criterion before locking the test set; report false positives and confidence, not just visual sharpness. Compare ordinary interpolation to rule out claims based solely on increased output pixels.
+
+Perturb the learned prior with plausible out-of-distribution layouts. If features appear in the reconstruction without support in the measurement, test whether the uncertainty mechanism flags them. A successful resolution claim must state the source family and measurement conditions under which it holds.
+
+\subsection{E11: optional sensor tilt and effective averaging}
+If constant-height inference fails systematically across the FOV, use a low-dimensional tilted plane $h(x,y)=h_0+a x+b y$. Evaluate the physical field on the nonplanar measurement coordinates and rotate the projection axis consistently when required. A spatial height map is not implemented by naively applying a different local convolution at each pixel. Compare with a scalar effective-height model on controlled simulated tilt and independently characterized acquisitions.
+
+\subsection{E12: optional multilayer source separation}
+Only after single-layer validation, model $y=\sum_\ell\mathcal M_{h_\ell}x_\ell+\eta$, preferably with structural source priors or known template families. Use the Bathla dictionary as the known-source baseline. Add continuous depth/position corrections and test dictionary mismatch. Report cross-talk, activity errors, layer-parameter uncertainty, and information supplied at inference. Arbitrary layer images at arbitrary depths are not uniquely identifiable from one sum.
+
+\begin{figure}[htbp]\centering
+\begin{tikzpicture}[node distance=5mm]
+\node[wideblock] (op) {E00--E01\\Trusted physics + known-height baseline};
+\node[wideblock,below=of op] (fail) {E02--E04\\Wrong-height and ambiguity diagnostics};
+\node[wideblock,below=of fail] (joint) {E05\\Joint prototype with strong controls};
+\node[wideblock,below left=9mm and 7mm of joint] (novel) {E06 or E07\\One failure-driven mechanism};
+\node[wideblock,below right=9mm and 7mm of joint] (real) {E08--E10\\Noise, real data, reliable resolution};
+\draw[arrow] (op)--(fail);\draw[arrow] (fail)--(joint);\draw[arrow] (joint)--(novel);\draw[arrow] (joint)--(real);
+\end{tikzpicture}
+\caption{A research ladder with decision gates. E11--E12 are optional extensions, not prerequisites for completing the first paper.}
+\end{figure}
+
+\deliver{Maintain one experiment ledger with IDs E00--E12, question, control, split, configuration hash, primary metrics, figure, conclusion, and next decision. A failed hypothesis is retained with its evidence.}

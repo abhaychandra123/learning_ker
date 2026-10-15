@@ -1,0 +1,60 @@
+<div id="qdm-frequency-example">
+  <h3>Recovering one fine-detail component</h3>
+  <div class="text-small">Toy model · frequency 0.25 cycles/µm · fixed noise contribution +0.02 · normalized amplitudes</div>
+  <div class="viz-controls" style="margin-top:16px">
+    <label class="form-label" for="qdm-height">Propagation gap: <span id="qdm-height-value" class="tabular-nums"></span>
+      <input id="qdm-height" class="form-range" type="range" min="0" max="5" step="0.1" value="2.5">
+    </label>
+    <label class="form-label" for="qdm-prior">Prior strength (toy L2): <span id="qdm-prior-value" class="tabular-nums"></span>
+      <input id="qdm-prior" class="form-range" type="range" min="-6" max="-1" step="0.1" value="-3.4">
+    </label>
+  </div>
+  <div id="qdm-amplitudes" style="display:grid;gap:16px;margin-top:16px" role="img" aria-label="Comparison of true, measured, directly inverted, and regularized fine-detail amplitudes">
+    <div><div class="viz-row" style="justify-content:space-between"><span>True detail</span><span data-value="truth" class="tabular-nums"></span></div><div class="progress" aria-hidden="true"><div data-bar="truth" class="progress-bar" style="background:var(--viz-series-1)"></div></div></div>
+    <div><div class="viz-row" style="justify-content:space-between"><span>Measured detail + noise</span><span data-value="measured" class="tabular-nums"></span></div><div class="progress" aria-hidden="true"><div data-bar="measured" class="progress-bar" style="background:var(--viz-series-2)"></div></div></div>
+    <div><div class="viz-row" style="justify-content:space-between"><span>Direct inverse</span><span data-value="direct" class="tabular-nums"></span></div><div class="progress" aria-hidden="true"><div data-bar="direct" class="progress-bar" style="background:var(--viz-series-3)"></div></div></div>
+    <div><div class="viz-row" style="justify-content:space-between"><span>Regularized inverse</span><span data-value="regularized" class="tabular-nums"></span></div><div class="progress" aria-hidden="true"><div data-bar="regularized" class="progress-bar" style="background:var(--viz-series-4)"></div></div></div>
+  </div>
+  <div id="qdm-gain" class="text-small tabular-nums" aria-live="polite" style="margin-top:16px"></div>
+</div>
+<script>
+(() => {
+  const root = document.getElementById('qdm-frequency-example');
+  const height = root.querySelector('#qdm-height');
+  const prior = root.querySelector('#qdm-prior');
+  function draw() {
+    const z = Number(height.value);
+    const coefficient = Math.pow(10, Number(prior.value));
+    const transfer = Math.exp(-2 * Math.PI * 0.25 * z);
+    const measured = transfer + 0.02;
+    const values = {truth: 1, measured, direct: measured / transfer,
+      regularized: transfer * measured / (transfer * transfer + coefficient)};
+    const maximum = Math.max(...Object.values(values));
+    root.querySelector('#qdm-height-value').textContent = z.toFixed(1) + ' µm';
+    root.querySelector('#qdm-prior-value').textContent = coefficient.toExponential(1);
+    for (const [name, amplitude] of Object.entries(values)) {
+      root.querySelector('[data-value="' + name + '"]').textContent = amplitude.toFixed(3);
+      root.querySelector('[data-bar="' + name + '"]').style.width = (100 * amplitude / maximum) + '%';
+    }
+    root.querySelector('#qdm-gain').textContent = 'Direct inversion multiplies this component’s noise by ' + (1 / transfer).toFixed(1) + '×';
+    root.querySelector('#qdm-amplitudes').setAttribute('aria-label', Object.entries(values).map(([k,v]) => k + ': ' + v.toFixed(3)).join('; '));
+  }
+  function restore(state) {
+    const data = state?.modelContent;
+    if (data && Number.isFinite(data.heightUm)) height.value = Math.max(0, Math.min(5, data.heightUm));
+    if (data && Number.isFinite(data.logPrior)) prior.value = Math.max(-6, Math.min(-1, data.logPrior));
+    draw();
+  }
+  function changed() {
+    draw();
+    if (window.openai?.setWidgetState) window.openai.setWidgetState({modelContent: {
+      heightUm: Number(height.value), logPrior: Number(prior.value)}, privateContent: null}).catch(() => {});
+  }
+  height.addEventListener('input', changed);
+  prior.addEventListener('input', changed);
+  window.addEventListener('openai:set_globals', event => {
+    if (event.detail?.globals?.widgetState) restore(event.detail.globals.widgetState);
+  });
+  restore(window.openai?.widgetState);
+})();
+</script>

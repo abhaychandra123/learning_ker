@@ -1,0 +1,78 @@
+\section{Training objectives and reliable evaluation}
+\label{sec:training}
+\subsection{Supervision should match the intended claim}
+For each simulation scene, store the reference field $x^\star$, observation $y$, true $h^\star$, metadata $m$, and source identity. Where relevant store $J^\star$, but distinguish it from the main field target. A proposed supervised objective is
+\begin{align}
+ L &=L_x+aL_h+bL_{\rm obs}+cL_{\rm aux},\\
+ L_x&=\frac{\norm{\hat x-x^\star}^2}{\norm{x^\star}^2+\epsilon_x},\qquad
+ L_h=\operatorname{Huber}\left((\hat h-h^\star)/s_h\right),\\
+ L_{\rm obs}&=\frac1{n}\norm{W(\mathcal M_{\hat h}\hat x-y)}^2.
+\end{align}
+Use a fixed training-derived floor $\epsilon_x$ for weak scenes and report such scenes separately. The scale $s_h$ makes height supervision interpretable. An auxiliary current loss is used only when a trusted current target exists. Loss weights are selected with the validation protocol, not the locked test set.
+
+For noisy targets, a noise-weighted likelihood is preferable to fitting every sample exactly. Estimate $W$ from calibration/repetitions, or use a specified synthetic covariance. Pixel independence and Gaussianity are assumptions, not consequences of a histogram. Finite-window model discrepancy can require a separate nuisance or robust residual model; inflating noise variance to hide every mismatch invalidates a physical accuracy claim.
+
+\subsection{Curriculum and optimization}
+\begin{enumerate}
+\item Verify the forward/adjoint and height derivatives on tiny arrays.
+\item Train A2 with known height on a stratified pilot. Inspect gradients, sign/amplitude conservation, and per-component errors.
+\item Train the height predictor independently. Log error by source size/current and compare simple spectral features.
+\item Train A3 end to end, including realistic height perturbations. This becomes the principal simple baseline.
+\item Initialize A4 from A3; enable bounded height refinement. Start with modest stage count and monitor each stage.
+\item Add one failure-driven mechanism. Refit or freeze shared components according to an explicit ablation plan.
+\item Expand COMSOL coverage, then add real calibration/adaptation on disjoint sessions.
+\end{enumerate}
+Adam or AdamW is a reasonable pilot optimizer; an illustrative initial learning-rate grid is $10^{-4}$ to $10^{-3}$, with separate rates for small calibration heads if needed. Do not transfer the magnetization paper's optimization schedule without justification. Select architecture depth and epoch budget from validation learning curves. Prefer a short pilot over a large unsuccessful sweep.
+
+For learned updates, fix the trained depth at inference unless extrapolation is itself evaluated. Classical solvers use the repository's optimality-based stopping criterion with their actual update counts and stop reasons. Ground truth is used for reporting and supervised training, never for classical stopping or per-test regularizer selection.
+
+\subsection{Losses to add only with a reason}
+Edge/profile losses can prioritize narrow features but amplify target interpolation artifacts. Spectral losses require a defined physical frequency grid and a reliability mask. SSIM is an optional supplementary metric; its data range and component treatment must be fixed. A reconstruction that looks plausible while changing amplitudes may score well perceptually and still be scientifically wrong. Avoid an adversarial loss until field amplitude, sign, and uncertainty are already controlled.
+
+For vector fields, a physically constrained latent potential/source may be stronger than an arbitrary penalty on components. A two-dimensional finite-difference divergence of $(B_x,B_y)$ is \emph{not} the full three-dimensional condition $\nabla\cdot\mathbf B=0$; the missing $\partial_z B_z$ matters. Enforce the appropriate source-free Fourier relations or full forward model rather than an incorrect 2D surrogate.
+
+\subsection{Uncertainty: what to predict and how to check it}
+Distinguish measurement noise (aleatoric), source ambiguity, training uncertainty, and discrepancy in the measurement model. A small ensemble can probe model variability, but it is not a guarantee of Bayesian coverage. For a discrete height distribution, report cross-entropy or NLL, Brier score or reliability bins, height set coverage, and set width. For continuous estimates use calibrated intervals, coverage versus nominal confidence, and sharpness.
+
+Conformal calibration~\cite{conformal} provides marginal coverage under its exchangeability assumptions. Holding out an entirely different source family or instrument can violate those assumptions. Report subgroup coverage under these shifts rather than implying a distribution-free guarantee still holds. Calibration and model selection must use separate data or a justified cross-validation scheme.
+
+Define a selective decision: accept a single-height reconstruction only when a calibrated height set and candidate fields are sufficiently concentrated under a criterion fixed on calibration data. Otherwise return the candidate set or label the result ambiguous. Evaluate the error--coverage curve as more difficult cases are rejected. Rejection must not remove all useful scenes.
+
+For a pair distribution with weights $w_j$, the field mean $\bar x=\sum_jw_jx_j$ can minimize squared field risk, but $(\bar x,\sum_jw_jh_j)$ need not be a physically coherent single explanation. Retain pairwise predictions for interpretation and repropagation.
+
+\subsection{Metrics and plots to standardize}
+\begin{longtable}{P{32mm}P{68mm}P{51mm}}
+\toprule Quantity & Definition/use & Interpretation warning\\\midrule\endhead
+Physical RMSE & $\sqrt{\operatorname{mean}(\hat x-x^\star)^2}$ in $\mu$T & Report components and predefined ROI\\
+Relative L2 & $\norm{\hat x-x^\star}/\norm{x^\star}$ & Unstable for negligible references; stratify\\
+Range NRMSE & RMSE divided by reference range & Large backgrounds and extreme pixels affect it\\
+Height MAE/bias & $\operatorname{mean}|\hat h-h^\star|$ and signed bias in $\mu$m & Nominal/fitted labels are not exact truth\\
+Profiles/features & Peak amplitude, width, gap/separation, sign & Predefine profile locations and criteria\\
+Observation fit & Whitened residual and spatial/spectral structure & Small residual does not prove correct height\\
+FOV consistency & Registered disagreement on common physical support & Common crop agreement can hide common bias\\
+Uncertainty & Coverage, set/interval width, selective error & Validate under source and session shift\\
+Latency/resources & Warmed synchronized median and dispersion; memory & Include height search/calibration stages\\\bottomrule
+\end{longtable}
+
+Compute errors in physical units after reversing normalization. Report whole-FOV, interior, and source-region results with masks defined from CAD or independent training rules, not selected to hide errors. For scalar real measurements, report measured-projection accuracy and reserve vector claims for independently validated channels.
+
+\subsection{A small evaluation matrix}
+\begin{tabularx}{\linewidth}{P{32mm}YY}
+\toprule Test regime & What changes & Principal question\\\midrule
+In-distribution & New source instances, familiar ranges & Basic estimator quality\\
+Geometry shift & Withheld topology/family or width/size range & Does the prior generalize?\\
+Height shift & Interpolation and extrapolation separately & Is calibration physically conditioned?\\
+Sampling shift & Pitch or grid size, declared FOV & Does scale information transfer?\\
+FOV shift & Edge/exterior sources, partial views & Are boundary assumptions appropriate?\\
+Noise shift & Covariance, variance, drift & Is the estimator robust and calibrated?\\
+Real shift & New coil/session/instrument where possible & Does simulated training transfer?\\\bottomrule
+\end{tabularx}
+
+\subsection{Statistics, fairness, and reproducibility}
+Use the physical scene/source or acquisition session as the unit of replication. Bootstrap paired method differences across sources, not millions of pixels as independent samples. Begin with at least three model seeds for the final selected variants if compute permits; report seed variability separately from source variability. Predeclare the primary endpoint and show confidence intervals, failure cases, and practical effect sizes.
+
+For timing, use identical hardware, dtype, batch size, output resolution, and observation information. Include candidate height search and uncertainty branches in total inference latency. Report training/calibration cost separately. A model with true height as input is an oracle diagnostic; label it clearly and do not mix it with unknown-height competitors. A method with test-time CAD or per-coil calibration has additional information and needs a separate evaluation regime.
+
+Save hashes for data manifests, splits, source code, checkpoints, and configurations. Record GPU model, software versions, numerical precision, stage counts, seeds, convergence outcomes, and any padding/support assumptions. Use fresh output directories; retain archived runs. A negative result is saved with its explanation rather than overwritten by a more favourable sweep.
+
+\deliver{A single evaluation script should produce component/ROI metrics, height distributions, uncertainty calibration, feature profiles, paired confidence intervals, timing, and an HTML or PDF report from saved arrays. The test set is not a hyperparameter dashboard.}

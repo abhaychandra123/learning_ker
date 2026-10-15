@@ -8,6 +8,16 @@ Reconstruct magnetic-field maps close to a simulated micro-coil from smoother ma
 
 The immediate scientific question is how reconstruction quality, optimization progress, and inference time compare. The existing experiment fits one coil's three component images. Generalization to another geometry or height is not established. No particular next feature is prescribed here: the user's current request supplies it.
 
+## Research direction confirmed on 8 October 2026
+
+The user wants a 4–6 month advanced research program on joint effective-standoff estimation and near-plane magnetic-field reconstruction, with evaluation across unseen source geometries, FOVs, pixel spacings, and noise. The primary output remains the magnetic field at a declared reference plane; current density is an auxiliary physical representation. Optical deconvolution and arbitrary multilayer separation are later extensions.
+
+The current goal is deblurring and physically validated super-resolution of QDM magnetic-field images across unknown standoffs, different FOVs, and geometries, using a learned unrolled network with variable/adaptive parameters. Begin from the existing LISTA/FISTA machinery and investigate conditioning or joint refinement of the propagation distance and learned reconstruction updates; the exact parameterization remains to be selected through controlled experiments. At fixed pixel count, a narrower physical FOV gives finer sampling (`pixel_spacing = FOV_extent / pixel_count`); actual recoverable resolution also depends on standoff, optics, and noise. Do not equate changing tensor size or interpolating an image with demonstrated physical super-resolution.
+
+The user confirmed access to an extensive existing COMSOL database, good GPUs, the real QDM, and the original experimental dataset underlying [Bathla et al.](https://arxiv.org/html/2506.05491v1), because they work in the same research group. The external database/files have not been inspected; the experimental archive will be obtained from a hard disk later and its calibration metadata are not yet known. Do not infer that the repository's current few geometry groups describe the full available database, or that the experimental archive already provides independently calibrated absolute heights or sharp reference-plane targets.
+
+The planning guide is authored in `output/pdf/qdm_research_guide/qdm_research_guide.tex` with chapter sources, original figures, experiment protocols, architecture comparisons, and dataset-audit instructions. Its methods are proposals, not implemented or validated new results. The existing numerical experiment and archived results below retain their original scope. A next implementation task still needs a concrete experiment selection and access to the relevant data.
+
 ## Read these in order
 
 1. This file for current scope, conventions, and entry points.

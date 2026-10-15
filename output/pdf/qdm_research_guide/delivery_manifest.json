@@ -1,0 +1,11 @@
+{
+  "date": "2026-10-08",
+  "pages": 36,
+  "figures": 10,
+  "experiment_ids": "E00-E12",
+  "source_bundle_build_verified": true,
+  "sha256": {
+    "qdm_research_guide.pdf": "367cd1ad7f801db964410645d1ee4802829fb93c5f09d852d47b2dddf433aa51",
+    "qdm_research_guide_latex.zip": "1ac1bc23d378a2f1091a59c69e9061d1cca53221e8a3674be96121f2bc872d4c"
+  }
+}

@@ -1,0 +1,90 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=23mm,headheight=15pt]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{amsmath,amssymb,bm,mathtools}
+\usepackage{microtype,graphicx,xcolor,booktabs,tabularx,longtable,array}
+\usepackage{enumitem,fancyhdr,titlesec,caption,float,listings}
+\usepackage[breakable]{tcolorbox}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,fit,calc,shapes.geometric}
+\usepackage{xurl}
+\usepackage[colorlinks=true,linkcolor=navy,urlcolor=teal,citecolor=teal]{hyperref}
+\definecolor{navy}{HTML}{16324F}
+\definecolor{teal}{HTML}{146C78}
+\definecolor{pale}{HTML}{EFF5F7}
+\definecolor{amber}{HTML}{94621A}
+\definecolor{ink}{HTML}{25313D}
+\definecolor{grayline}{HTML}{CFD9DF}
+\color{ink}
+\hypersetup{pdftitle={Joint Standoff Estimation and QDM Magnetic Reconstruction: A Research Playbook},pdfauthor={Research planning guide for Abhay},pdfsubject={Experimental design, inverse problems, architectures, and publication evidence}}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{5pt}
+\setlength{\emergencystretch}{2em}
+\setcounter{tocdepth}{2}
+\setlist[itemize]{leftmargin=*,topsep=3pt,itemsep=2pt}
+\setlist[enumerate]{leftmargin=*,topsep=3pt,itemsep=3pt}
+\renewcommand{\arraystretch}{1.18}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\newcolumntype{P}[1]{>{\raggedright\arraybackslash}p{#1}}
+\titleformat{\section}{\Large\bfseries\color{navy}}{\thesection}{0.6em}{}
+\titleformat{\subsection}{\large\bfseries\color{teal}}{\thesubsection}{0.6em}{}
+\titleformat{\subsubsection}{\normalsize\bfseries\color{navy}}{\thesubsubsection}{0.6em}{}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small QDM research playbook}
+\fancyhead[R]{\small Joint calibration and reconstruction}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+\captionsetup{font=small,labelfont=bf}
+\tcbset{colback=pale,colframe=grayline,boxrule=0.5pt,arc=1mm,left=3mm,right=3mm,top=2mm,bottom=2mm,breakable}
+\newcommand{\deliver}[1]{\begin{tcolorbox}[title=\textbf{Deliverable},coltitle=navy]#1\end{tcolorbox}}
+\newcommand{\gate}[1]{\begin{tcolorbox}[title=\textbf{Decision gate},coltitle=teal]#1\end{tcolorbox}}
+\newcommand{\caution}[1]{\begin{tcolorbox}[title=\textbf{Scientific interpretation},coltitle=amber]#1\end{tcolorbox}}
+\newcommand{\norm}[1]{\left\lVert#1\right\rVert}
+\newcommand{\A}{\mathcal A}
+\newcommand{\C}{\mathcal C}
+\newcommand{\Samp}{\mathcal S}
+\newcommand{\D}{\mathcal D}
+\newcommand{\R}{\mathcal R}
+\newcommand{\F}{\mathcal F}
+\newcommand{\um}{\,\mu\mathrm m}
+\newcommand{\uT}{\,\mu\mathrm T}
+\tikzset{block/.style={draw=grayline,fill=pale,rounded corners=2pt,align=center,minimum height=12mm,text width=32mm,font=\small},wideblock/.style={block,text width=44mm},arrow/.style={-{Latex[length=2mm]},thick,draw=teal},note/.style={font=\footnotesize,align=center,text=ink}}
+\lstset{basicstyle=\ttfamily\footnotesize,breaklines=true,columns=fullflexible,keepspaces=true,frame=single,rulecolor=\color{grayline},backgroundcolor=\color{pale},showstringspaces=false,tabsize=4,keywordstyle=\color{teal},commentstyle=\color{amber}}
+\begin{document}
+\hypersetup{pageanchor=false}
+\begin{titlepage}
+\vspace*{12mm}
+{\small\bfseries\color{teal} A 4--6 MONTH RESEARCH PROGRAM}\par
+\vspace{8mm}
+{\Huge\bfseries\color{navy} Joint Standoff Estimation\par and Magnetic Reconstruction}\par
+\vspace{6mm}
+{\Large A practical research playbook for quantum diamond microscopy}\par
+\vspace{12mm}
+\begin{tcolorbox}
+\textbf{Research question}\par
+Can a physics-based learned inverse jointly estimate effective standoff and reconstruct a magnetic image at a specified reference plane, while generalizing across unseen source geometries, fields of view, pixel spacings, and noise conditions?
+\end{tcolorbox}
+\vspace{8mm}
+\textbf{Prepared for:} Abhay's micro-coil reconstruction project, with access to COMSOL, GPUs, real QDM measurements, and Anuj Bathla's experimental dataset.\par
+\textbf{Level:} advanced theory and implementation; prerequisites are refreshed where they affect scientific validity.\par
+\textbf{Primary target:} near-plane magnetic fields. Current density is developed as an optional latent physical representation; this choice can be revised after the dataset audit.\par
+\textbf{Version:} 8 October 2026.\par
+\vfill
+\textbf{How to use this document}\par
+Follow the numbered experiments and decision gates. Build a simple baseline, diagnose its failure, and then introduce one architectural change that addresses that failure. Proposed methods are hypotheses to test, not established novel contributions. No research outcome or conference acceptance is promised.
+\end{titlepage}
+\pagenumbering{roman}
+\hypersetup{pageanchor=true}
+\tableofcontents
+\clearpage
+\pagenumbering{arabic}
+\input{sections/01_scope_physics.tex}
+\input{sections/02_data.tex}
+\input{sections/03_experiments.tex}
+\input{sections/04_architectures.tex}
+\input{sections/05_training_evaluation.tex}
+\input{sections/06_experimental_publication.tex}
+\input{sections/07_appendices.tex}
+\end{document}

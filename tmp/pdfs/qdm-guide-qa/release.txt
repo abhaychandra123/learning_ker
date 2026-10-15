@@ -1,0 +1,2030 @@
+A 4–6 MONTH RESEARCH PROGRAM
+
+
+
+
+Joint Standoﬀ Estimation
+and Magnetic Reconstruction
+A practical research playbook for quantum diamond microscopy
+
+
+
+  Research question
+  Can a physics-based learned inverse jointly estimate eﬀective standoﬀ and reconstruct a mag-
+  netic image at a speciﬁed reference plane, while generalizing across unseen source geometries,
+  ﬁelds of view, pixel spacings, and noise conditions?
+
+
+
+Prepared for: Abhay’s micro-coil reconstruction project, with access to COMSOL, GPUs, real
+QDM measurements, and Anuj Bathla’s experimental dataset.
+Level: advanced theory and implementation; prerequisites are refreshed where they aﬀect scientiﬁc
+validity.
+Primary target: near-plane magnetic ﬁelds. Current density is developed as an optional latent
+physical representation; this choice can be revised after the dataset audit.
+Version: 8 October 2026.
+
+
+
+
+How to use this document
+Follow the numbered experiments and decision gates. Build a simple baseline, diagnose its fail-
+ure, and then introduce one architectural change that addresses that failure. Proposed methods
+are hypotheses to test, not established novel contributions. No research outcome or conference
+acceptance is promised.
+QDM research playbook                                                 Joint calibration and reconstruction
+
+
+
+Contents
+
+1 Start with a tractable research claim                                                                 1
+   1.1 The project you are actually building . . . . . . . . . . . . . . . . . . . . . . . . . .        1
+   1.2   Four hypotheses to investigate separately . . . . . . . . . . . . . . . . . . . . . . .        1
+   1.3   Use the guide in passes . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .    2
+
+2 Physics, observations, and identiﬁability                                                             2
+   2.1   Deﬁne the output before deﬁning the network . . . . . . . . . . . . . . . . . . . . .          2
+   2.2 Analytical propagation and sensitivity to distance . . . . . . . . . . . . . . . . . . .         3
+   2.3 An exact reason that residual-only height estimation fails . . . . . . . . . . . . . .           4
+   2.4   Proﬁle objectives and nuisance parameters . . . . . . . . . . . . . . . . . . . . . . .        4
+   2.5 What additional heights actually provide . . . . . . . . . . . . . . . . . . . . . . . .         4
+   2.6 A minimal physically constrained source representation . . . . . . . . . . . . . . . .           5
+
+3 Audit and organize the existing databases                                                             5
+   3.1 Your resources and the ﬁrst decisions . . . . . . . . . . . . . . . . . . . . . . . . . .        5
+   3.2   COMSOL inventory: the ﬁrst two working days . . . . . . . . . . . . . . . . . . . .            5
+   3.3   Reuse complete height sweeps without learning test-pair kernels . . . . . . . . . . .          6
+   3.4   Dataset tiers . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .    6
+   3.5   Splitting protocol and leakage controls . . . . . . . . . . . . . . . . . . . . . . . . .      6
+   3.6   Sampling, cropping, and normalization . . . . . . . . . . . . . . . . . . . . . . . . .        7
+
+4 How to use Anuj Bathla’s experimental dataset                                                         7
+   4.1 What is established and what is still unknown . . . . . . . . . . . . . . . . . . . . .          7
+   4.2   Data-receipt checklist . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .     7
+   4.3   Six concrete uses, in increasing order of diﬃculty . . . . . . . . . . . . . . . . . . .       8
+   4.4   Splits that are honest for a single fabricated array . . . . . . . . . . . . . . . . . .       8
+
+5 The experiment ladder: investigate before inventing                                                   9
+   5.1   E00: operator correctness and model discrepancy . . . . . . . . . . . . . . . . . . .          9
+   5.2   E01: known-height reconstruction . . . . . . . . . . . . . . . . . . . . . . . . . . . .      10
+   5.3   E02: intentionally wrong height . . . . . . . . . . . . . . . . . . . . . . . . . . . . .     10
+   5.4   E03: source–height ambiguity and shortcut detection . . . . . . . . . . . . . . . . .         10
+   5.5   E04: the two-stage baseline . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .     11
+   5.6   E05: joint ﬁeld–height reﬁnement . . . . . . . . . . . . . . . . . . . . . . . . . . . .      11
+   5.7   E06: multiple hypotheses and calibrated rejection . . . . . . . . . . . . . . . . . . .       11
+   5.8   E07: FOV, pitch, and outside-window contributions . . . . . . . . . . . . . . . . .           12
+   5.9   E08: noise and acquisition robustness . . . . . . . . . . . . . . . . . . . . . . . . .       12
+   5.10 E09: COMSOL-to-experiment transfer . . . . . . . . . . . . . . . . . . . . . . . . .           12
+
+
+                                                    i
+QDM research playbook                                                 Joint calibration and reconstruction
+
+
+   5.11 E10: physical resolution and prior dependence . . . . . . . . . . . . . . . . . . . . .        12
+   5.12 E11: optional sensor tilt and eﬀective averaging . . . . . . . . . . . . . . . . . . . .       13
+   5.13 E12: optional multilayer source separation . . . . . . . . . . . . . . . . . . . . . . .       13
+
+6 What architectures to learn, build, and compare                                                      13
+   6.1 A learning order tied to implementation milestones . . . . . . . . . . . . . . . . . .          13
+   6.2 A0: reproduce the existing physics-correction LISTA . . . . . . . . . . . . . . . . .           14
+   6.3 A0b: coeﬃcient LISTA for the Bathla dictionary . . . . . . . . . . . . . . . . . . .            15
+   6.4 A1: supervised residual CNN and U-Net controls . . . . . . . . . . . . . . . . . . .            15
+   6.5 A2: known-height conditioned physics network . . . . . . . . . . . . . . . . . . . .            15
+   6.6 A3: a strong two-stage calibration baseline . . . . . . . . . . . . . . . . . . . . . . .       16
+   6.7 A4: joint reﬁnement prototype . . . . . . . . . . . . . . . . . . . . . . . . . . . . .         16
+   6.8 A5: a candidate bank for ambiguous height . . . . . . . . . . . . . . . . . . . . . .           16
+   6.9 A6: uncertainty-sensitive spectral reﬁnement . . . . . . . . . . . . . . . . . . . . .          18
+   6.10 A7: current-latent inference as a stronger physical prior . . . . . . . . . . . . . . .        18
+   6.11 Optional architectures: when they are worth trying . . . . . . . . . . . . . . . . . .         18
+   6.12 How to turn a failure into an architectural hypothesis . . . . . . . . . . . . . . . .         18
+
+7 Training objectives and reliable evaluation                                                          19
+   7.1   Supervision should match the intended claim . . . . . . . . . . . . . . . . . . . . .         19
+   7.2   Curriculum and optimization . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .       19
+   7.3   Losses to add only with a reason . . . . . . . . . . . . . . . . . . . . . . . . . . . .      20
+   7.4   Uncertainty: what to predict and how to check it . . . . . . . . . . . . . . . . . . .        20
+   7.5   Metrics and plots to standardize . . . . . . . . . . . . . . . . . . . . . . . . . . . .      20
+   7.6 A small evaluation matrix . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .       21
+   7.7   Statistics, fairness, and reproducibility . . . . . . . . . . . . . . . . . . . . . . . . .   21
+
+8 Experimental validation with the real microscope                                                     22
+   8.1   Plan the ﬁrst campaign around one falsiﬁable claim . . . . . . . . . . . . . . . . . .        22
+   8.2 A measurement protocol . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .        22
+   8.3 What counts as height ground truth . . . . . . . . . . . . . . . . . . . . . . . . . .          23
+   8.4   Near-plane reference versus optical-free ﬁeld . . . . . . . . . . . . . . . . . . . . . .     23
+   8.5   Domain adaptation without target leakage . . . . . . . . . . . . . . . . . . . . . . .        23
+   8.6   Multilayer extension and useful acquisition design . . . . . . . . . . . . . . . . . . .      23
+
+9 A manageable 4–6 month work plan                                                                     23
+   9.1 Weekly operating rhythm . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .         24
+
+10 From a prototype to a publishable contribution                                                      24
+   10.1 Write the evidence chain before the paper title . . . . . . . . . . . . . . . . . . . .        25
+
+
+
+                                                    ii
+QDM research playbook                                                Joint calibration and reconstruction
+
+
+   10.2 Novelty audit . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .   25
+   10.3 The minimum convincing paper package . . . . . . . . . . . . . . . . . . . . . . . .          25
+   10.4 Venue strategy and dated deadline snapshot . . . . . . . . . . . . . . . . . . . . . .        26
+   10.5 When to stop adding experiments . . . . . . . . . . . . . . . . . . . . . . . . . . . .       26
+
+A Implementation map for the current repository                                                       27
+   A.1 What can be reused . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .       27
+   A.2 A diﬀerentiable propagation fragment . . . . . . . . . . . . . . . . . . . . . . . . .         27
+   A.3 A split-aware training skeleton . . . . . . . . . . . . . . . . . . . . . . . . . . . . .      28
+
+B Practical records and templates                                                                     28
+   B.1 Scene manifest example . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .       28
+   B.2 Experiment card . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .      29
+   B.3 First 10 working days . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .      29
+   B.4 Failure triage . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .   30
+   B.5 A ﬁnal claim audit . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .     30
+
+C Focused reading and questions for collaborators                                                     30
+   C.1 Read with an implementation target . . . . . . . . . . . . . . . . . . . . . . . . . .         30
+   C.2 Questions to resolve when the hard disk arrives . . . . . . . . . . . . . . . . . . . .        31
+
+
+
+
+                                                   iii
+QDM research playbook                                             Joint calibration and reconstruction
+
+
+
+1 Start with a tractable research claim
+
+1.1 The project you are actually building
+
+Your long-term objective is reliable reconstruction of sharp QDM magnetic images under uncertain
+measurement geometry. The ﬁrst paper should answer a bounded version: for a single planar
+source layer, can joint standoﬀ inference improve reconstruction of the magnetic ﬁeld at a ﬁxed
+reference plane, including on source geometries excluded from training? FOV, sampling, and noise
+robustness become explicit challenge sets. Multilayer separation and optical inversion are later
+extensions with diﬀerent identiﬁability assumptions.
+You have access to an extensive existing COMSOL database, GPUs, real QDM measurements,
+and the experimental dataset underlying Bathla et al. [17]. Use these resources as the core of
+the study. The few geometries visible in the current repository do not describe the full database
+available to your group. This guide has not inspected that external database: counts, units,
+available components, calibrated heights, and acquisition labels must be established by the audit
+in Section 3.
+  A one-sentence working claim
+  We investigate a joint calibration-and-reconstruction method that uses analytical propagation
+  and a learned source prior to estimate eﬀective standoﬀ and reconstruct a near-plane magnetic
+  ﬁeld, with source-level holdouts and calibrated treatment of ambiguous observations.
+
+
+
+1.2 Four hypotheses to investigate separately
+
+1. H1: calibration matters. Height errors explain a measurable part of reconstruction error
+   after boundary and sampling eﬀects are controlled.
+2. H2: joint inference helps. Reﬁning image and distance together improves over a height
+   predictor followed by a ﬁxed reconstruction network under matched training data and compute.
+3. H3: ambiguity should be represented. A distribution or set of height–image hypotheses
+   yields fewer conﬁdently incorrect decisions than a single estimate.
+4. H4: physical metadata helps transfer. Explicit observation operators and physical pixel
+   spacing improve transfer across FOV and sampling changes.
+
+H1 can be rejected. H2 can be rejected. A simple baseline winning is useful information. Choose
+one central methodological claim for the paper; treat the other hypotheses as controls or supporting
+studies.
+
+
+
+
+                                                 1
+QDM research playbook                                                Joint calibration and reconstruction
+
+
+1.3 Use the guide in passes
+
+ Pass             Read and execute                            Required output before expanding
+                                                              scope
+ First 10 days    Scope, dataset audit, E00–E03               Trusted operator; wrong-height curve;
+                                                              source split
+ Weeks 3–6        Baselines and architecture A0–A3            A clear baseline failure and an
+                                                              interpretable prototype
+ Weeks 7–12       One proposed mechanism; challenge           Matched ablation with repeatable
+                  sets                                        beneﬁt
+ Months 4–6       Real-data validation and paper              Defensible physical claim, limitations,
+                  evidence                                    reproducible release
+
+  Deliverable
+  Your immediate milestone is one ﬁgure showing reconstruction error and observation mismatch
+  versus assumed height, evaluated on several independent COMSOL source layouts.
+
+
+
+2 Physics, observations, and identiﬁability
+
+2.1 Deﬁne the output before deﬁning the network
+
+Let h be the sensor height relative to a declared source plane, and let zref be the ﬁxed target-plane
+height. Initially use zref = 0.5 µm to match the repository. The propagation gap is δ = h − zref > 0.
+Let x denote the vector ﬁeld at that plane on a larger physical domain, before restricting it to the
+requested output ROI. The observation is
+
+                                    y = CSQAδ x + η = Mh x + η.                                       (1)
+
+Here Q projects onto measured NV axes or selects vector components; S integrates/resamples
+to detector pixels; C restricts the observation window; and η denotes noise. Known optical and
+NV-depth averaging can eventually enter Mh . They should be accounted for as nuisance eﬀects
+when material, even while optical deconvolution remains outside the ﬁrst paper.
+For simulation inputs, y can contain all three signed components. The published Bathla acquisition
+uses a single NV-axis projection. A model must support the actual available channels; a single-axis
+image cannot be relabelled as three independently measured components. The primary target is
+a magnetic ﬁeld, not an optical photograph or binary wire segmentation.
+
+                  Physical source           Reference-plane             Propagation
+                     J or M                     ﬁeld x                    Ah−zref
+
+
+
+                  Observed map y            FOV restriction            Projection and
+                   and metadata              C and noise              pixel integration
+
+Figure 1: The observation model. Generate the physical ﬁeld on a larger domain before sensing and
+cropping. The learned inverse estimates the target ﬁeld and calibration parameters from the observed map.
+
+
+
+
+                                                   2
+QDM research playbook                                                                                                                                                                      Joint calibration and reconstruction
+
+
+2.2 Analytical propagation and sensitivity to distance
+
+In a homogeneous source-free region, ∇ × H = 0 and ∇ · H = 0. The scalar potential is harmonic.
+For spatial frequency f = (fx , fy ) in cycles per micrometre,
+
+                                                                                                                b(f , z2 ) = e−2π∥f ∥(z2 −z1 ) x
+                                                                                                                x                              b(f , z1 ).                                                                       (2)
+
+The three signed components share this decay. In vacuum, B = µ0 H; store which quantity and
+units are supplied. In this project the cache is in tesla and loading typically converts to microtesla.
+Bnorm is nonlinear and should not be treated as another independent linear measurement channel.
+
+                                                                                                         Hδ (f ) = e−2π∥f ∥δ ,              ∂h Hδ = −2π ∥f ∥ Hδ .                                                                (3)
+An overestimate ∆h in a direct inverse multiplies the reconstructed spectral amplitude by e2π∥f ∥∆h .
+At f = 0.5 cycles/µm and ∆h = 0.2 µm, this factor is about 1.87. This is an analytical illustration,
+not a measured error bound for a regularized network.
+
+                                                                                             Upward propagation                                                                                 Unregularized inverse
+                                        100
+Transfer amplitude H (dimensionless)
+
+
+
+
+                                                                                                                                          Noise gain 1/H (dimensionless)           Propagation gap
+                                       10−3                                                                                                                                1018          0.5 µm
+                                                                                                                                                                                         1 µm
+
+                                       10−6                                                                                                                                1015          2.5 µm
+                                                                                                                                                                                         5 µm
+
+                                       10   −9                                                                                                                             1012
+
+
+                                       10−12                                                                                                                               109
+                                                                              Propagation gap
+                                       10−15                                         0.5 µm
+                                                                                                                                                                           106
+                                                                                     1 µm
+                                       10−18                                         2.5 µm                                                                                103
+                                                                                     5 µm
+                                                                                                                                                                           100
+                                                                             0.00   0.25   0.50     0.75    1.00   1.25        1.50                                               0.00   0.25   0.50     0.75    1.00   1.25   1.50
+                                                                                       Spatial frequency (cycles/µm)                                                                        Spatial frequency (cycles/µm)
+
+
+Figure 2: Original analytical illustration. Standoﬀ attenuates ﬁne structure and direct inversion ampliﬁes
+its noise. No experimental reconstruction results are shown.
+
+
+                                                                             102          Height overestimate 0.1 µm
+                                                                                          Height overestimate 0.25 µm
+                                            Recovered-amplitude multiplier
+
+
+
+
+                                                                                          Height overestimate 0.5 µm
+
+
+
+
+                                                                             101
+
+
+
+
+                                                                             100
+                                                                                    0.0            0.2          0.4         0.6          0.8         1.0                                             1.2         1.4
+                                                                                                                         Spatial frequency (cycles/µm)
+
+
+Figure 3: Original analytical illustration of distance sensitivity. A ﬁxed height error causes greater spectral
+distortion at higher frequency. This motivates testing uncertainty-sensitive reﬁnement.
+
+
+
+
+                                                                                                                                      3
+QDM research playbook                                                                     Joint calibration and reconstruction
+
+
+
+
+                                                                                                                             Bz (µT), shared symmetric-log scale
+                  z = 0.5 µm                z = 1 µm                       z = 3 µm                 z = 5 µm         103
+                peak 1600.0 µT            peak 200.0 µT                   peak 7.4 µT              peak 1.6 µT       102
+          8                         8                           8                          8
+                                                                                                                     101
+                                                                                                                     100
+                                                                                                                     10−1
+y (µm)
+
+
+
+
+          0                         0                           0                          0                         0
+                                                                                                                     −10−1
+                                                                                                                     −100
+                                                                                                                     −101
+         −8                        −8                          −8                         −8
+           −8          0         8   −8          0           8   −8            0        8   −8            0      8   −102
+                    x (µm)                    x (µm)                        x (µm)                     x (µm)        −103
+
+
+
+Figure 4: Original analytical point-dipole example, not a COMSOL or microscope result. A common
+symmetric-log colour scale exposes both attenuation and broadening; peak values are stated explicitly. This
+example teaches observation physics, not the proposed coil benchmark.
+
+
+2.3 An exact reason that residual-only height estimation fails
+
+In an ideal inﬁnite-plane, noiseless model, suppose y = Aδ x. For any 0 ≤ δ ′ ≤ δ, deﬁne x′ = Aδ−δ′ x.
+The semigroup property gives
+                                               Aδ′ x′ = Aδ′ Aδ−δ′ x = Aδ x = y.                                               (4)
+Thus a smoother reference ﬁeld at a smaller gap explains the same observation exactly. A ﬂexible
+unconstrained ﬁeld can trade source structure against distance. A network trained on one coil size
+may learn that size as a shortcut and call larger coils “farther away.”
+Restrictions to real source families, geometric knowledge, controlled drive currents, and indepen-
+dent calibration can make height inference informative. A learned estimate is conditional on those
+assumptions. Physical consistency and extra vector channels improve practical constraints but do
+not guarantee unique absolute depth for unrestricted planar sources.
+
+
+2.4 Proﬁle objectives and nuisance parameters
+
+A useful diagnostic is                                  n                                      o
+                                                                            2
+                                                            2 ∥W (Mh x − y)∥ + λR(x)
+                                                            1
+                                        Φ(h) = min                                                 ,                          (5)
+                                                   x
+where W whitens the assumed noise. Plot Φ(h), its data term, and ground-truth reconstruction
+error separately. Proﬁle minima depend on the prior, noise model, support, and solver accuracy;
+a proﬁle is not automatically a calibrated posterior.
+For local source parameters ϑ, deﬁne the whitened sensitivities Jh = ∂h (W Mh xϑ ) and Jϑ =
+∂ϑ (W Mh xϑ ). A local nuisance-adjusted information diagnostic is
+                                                       Ih|ϑ = JhT (I − PJϑ )Jh ,                                              (6)
+with P the projection onto the nuisance sensitivity span. If distance changes can be reproduced
+by changing geometry or current, little information remains. This is a local idealized diagnostic;
+nonlinear multimodality and model error require explicit tests.
+
+
+2.5 What additional heights actually provide
+
+Measurements at several heights above all sources are related by upward continuation in the ideal
+complete-plane source-free model. They do not independently determine an arbitrary multilayer
+decomposition. In practice they can improve SNR, registration checks, noise characterization,
+and ﬁnite-window constraints. Known stage increments give relative distances; absolute standoﬀ
+remains a separate calibration question.
+
+                                                                      4
+QDM research playbook                                           Joint calibration and reconstruction
+
+
+2.6 A minimal physically constrained source representation
+
+For planar currents, a stream function g can deﬁne Jx = ∂y g and Jy = −∂x g, enforcing ∇ · J = 0
+away from contacts. Predicting g and using Biot–Savart provides a source-aware prior, then the
+ﬁeld at zref becomes the main output. Contacts and currents crossing the FOV require appropri-
+ate source-domain extensions and boundary treatment. Field-ﬁrst and source-latent formulations
+should be compared, not silently conﬂated.
+  Scientiﬁc interpretation
+  Standoﬀ deblurring restores detail conditional on a prior and measurement model. A ﬁner
+  output grid is not evidence of ﬁner physical resolution. Deﬁne success through recoverable
+  features, ﬁeld accuracy, calibration accuracy, and reliability on held-out sources.
+
+
+
+3 Audit and organize the existing databases
+
+3.1 Your resources and the ﬁrst decisions
+
+The user conﬁrmed an existing detailed COMSOL database and access to the real measurements
+from Bathla et al. [17]. The experimental ﬁles are on external storage and will be obtained later;
+their contents have not yet been inspected. The ﬁrst-paper output is conﬁrmed as near-plane
+magnetic ﬁelds, with currents used as an auxiliary model. Begin the simulation study immediately;
+make the real-data protocols conditional on the audit rather than postponing the entire project.
+
+
+3.2 COMSOL inventory: the ﬁrst two working days
+
+Make a read-only manifest before conversion. Give each source layout a stable geometry_id, and
+each simulation conﬁguration a scene_id. Distinguish a genuinely new conductor layout from a
+diﬀerent height, current, mesh, or crop of the same layout. Count unique geometries, not exported
+images.
+
+  Required ﬁeld            Purpose and veriﬁcation
+  Geometry/source          CAD/model hash; topology; turns; width; spacing; source layer;
+  identity                 contacts. Identify duplicates and translated copies.
+  Coordinates and          Physical x, y, z coordinates; ascending order; exact ∆x, ∆y; FOV
+  pitch                    extent. Verify orientation and registration.
+  Height convention        Origin of z; conductor top, centre, or substrate reference; known
+                           source thickness; absolute height versus gap.
+  Drive                    Applied current/voltage; measured or prescribed value; sign;
+                           contact boundary conditions.
+  Physics and quantity     B versus H; units; material permeability; current density
+                           availability; source-free region validity.
+  Numerics                 COMSOL version, mesh size, solver tolerance, interpolation/export
+                           procedure, simulation boundaries.
+  Files and provenance     Paths, SHA-256, grid shape, data type, component labels, missing
+                           values, source-generation seed.
+  Target availability      Field at zref ; existence of complete same-geometry height sweeps;
+                           whether a trusted target needs new simulation.
+
+
+
+                                                5
+QDM research playbook                                             Joint calibration and reconstruction
+
+
+Create a report showing height counts per geometry, pitch/FOV distributions, missing compo-
+nents, ﬁeld ranges, and coordinate agreement. Plot a few proﬁles at every height. Repeated ﬁeld
+interpolation artifacts are model discrepancy, not automatically independent measurement noise.
+
+
+3.3 Reuse complete height sweeps without learning test-pair kernels
+
+Where a geometry has ﬁelds at zref and several higher planes, use the lower ﬁeld as target and
+each higher plane as an observation. The analytical operator is evaluated from physical spacing
+and height. A held-out sharp ﬁeld must not be used to ﬁt that observation’s empirical kernel.
+Compare direct COMSOL high-plane ﬁelds with analytical propagation of the low-plane ﬁeld.
+This residual includes export interpolation, discretization, ﬁnite-window error, registration, and
+any modelling mismatch. Investigate its structure before ascribing it to mesh noise. A bounded
+empirical correction may be a later experiment, but its parameters must be ﬁtted on training/cal-
+ibration data only, and tested on unused geometries or acquisition sessions.
+
+
+3.4 Dataset tiers
+
+ Tier               Data                                    Scientiﬁc role
+ T0: mechanics      Small analytical cases, Fourier        Operator, adjoint, gradients, and
+                    modes, closed loops                    ambiguity checks
+ T1: pilot          Stratiﬁed subset of the existing       Baseline comparison and failure
+                    COMSOL database                        discovery
+ T2: challenge      Disjoint COMSOL layouts/families       Generalization; simulator/model
+                    and selected numerical settings        mismatch
+ T3: real archive Audited Bathla maps, labels, and         Real noise, dictionary comparison,
+                    repetitions                            source activations
+ T4: new            Calibrated height sweeps and           Direct validation of target-plane
+ acquisition        independent layouts                    reconstruction and distance
+Use new analytical scenes to answer controlled questions, not as a replacement for the existing
+database. Add new COMSOL simulations only to ﬁll an identiﬁed gap: geometry families, near-
+plane references, mesh-convergence checks, or height ranges.
+
+
+3.5 Splitting protocol and leakage controls
+
+First assign source identities to train, validation, calibration, and test groups; only then derive
+heights, current rescalings, crops, and noise variants. The calibration group is needed only if
+uncertainty calibration is included and must be distinct from the model-selection validation set.
+All descendants of a geometry remain in the same group. Near-duplicates and variants from the
+same template generator may require a higher-level family grouping.
+Maintain two diﬀerent evaluations: new-instance interpolation within a geometry family, and
+unseen-family transfer. A random split of conﬁgurations is not evidence of unseen geometry.
+Separate height interpolation from extrapolation. Record exact withheld ranges and test them
+once after selecting the model.
+For a pilot, choose approximately 100 independent layouts if available, with a 60/20/20 source-level
+train/validation/test split. This is a starting engineering conﬁguration, not a sample-size justiﬁ-
+cation. If calibration is needed, reserve additional sources or repartition without examining the
+locked test outcomes. Expand according to learning curves and precision of source-level conﬁdence
+intervals.
+
+
+                                                 6
+QDM research playbook                                                 Joint calibration and reconstruction
+
+
+                                          Independent source/-
+                                             CAD identities
+                                         and acquisition sessions
+
+
+
+
+                                              Validation and
+    Training sources                                                                Locked test sources
+                                            calibration sources
+
+
+
+   All heights, crops,                      All heights, crops,                      All heights, crops,
+   noise descendants                        noise descendants                        noise descendants
+
+Figure 5: Split physical identities before creating training examples. Correlated crops and height variants
+cannot be moved across source-level partitions.
+
+
+3.6 Sampling, cropping, and normalization
+
+Propagate on a larger domain and then apply pixel integration and FOV restriction. For coarser
+pitch, antialias and integrate the ﬁeld; do not simply resize an image and declare a new physical
+spacing. Upsampling labels does not create new measured information. If the target uses a diﬀerent
+grid, make that output grid explicit and interpolate only through a documented observation model.
+Use a ﬁxed scale estimated from training data or an observation-only scale q(y), and retain q as
+physical metadata when amplitude carries information. Reconstruct in physical units for metrics.
+If minimizing the existing half-squared loss plus an L1 penalty under x = qu, the normalized
+coeﬃcient is λ/q. Do not normalize using held-out sharp targets. At zero or near-zero signal, use
+a predetermined scale ﬂoor and ﬂag height as uninformative.
+Rotating a ﬁeld image requires rotating its vector components as well as its spatial coordinates.
+Under a planar rotation R, rotate (Bx , By ) consistently and transform the NV projection direction
+for scalar observations. Scaling geometry changes physics and cannot be implemented by spatial
+resizing alone. Reverse all signed components for current reversal under the linear magnetostatic
+model.
+
+
+4 How to use Anuj Bathla’s experimental dataset
+
+4.1 What is established and what is still unknown
+
+The published study describes measured individual-coil basis ﬁelds and mixed activations on a
+multilayer micro-coil platform, plus time-dependent measurements. Its reconstruction uses sparse
+coeﬃcients in a measured dictionary. Your group’s original ﬁles may contain more information
+than the paper, but this guide cannot assume that ﬁxed-reference sharp ﬁelds, absolute calibrated
+standoﬀs, or all vector components are already present. Obtain those facts from acquisition logs.
+
+
+4.2 Data-receipt checklist
+
+1. Copy data into a read-only archive; retain original folder structure, checksums, and the acqui-
+   sition notebook. Work from versioned derived copies.
+2. Identify ﬁeld maps, raw ODMR/lock-in sequences, current-on/oﬀ references, individual-coil
+   maps, mixed activations, timestamps, and event waveforms.
+
+
+                                                    7
+QDM research playbook                                             Joint calibration and reconstruction
+
+
+3. Obtain the coil-to-layer lookup, microscope magniﬁcation, pixel pitch, NV axis, coordinate
+   conventions, drive values, and registration transforms.
+4. Label every distance as independently measured, nominal, model-ﬁtted, relative stage displace-
+   ment, or unknown. Store uncertainty and calibration method.
+5. Ask whether basis maps and mixtures were measured in the same session and at the same drive.
+   Check drift, gain, and background diﬀerences.
+6. Verify data-release permission and what can be made public. This aﬀects the reproducibility
+   package; it does not alter the scientiﬁc split.
+
+
+4.3 Six concrete uses, in increasing order of diﬃculty
+
+U1: benchmark the published task. Reproduce ﬁeld ﬁtting and activation recovery with the
+measured dictionary before adding a neural network. The unknown is a coeﬃcient vector, not ﬁeld
+pixels. For dictionary D = [d1 , . . . , dK ] and observation y, solve
+
+                              ĉ = arg min 12 ∥W (Dc − y)∥2 + λ ∥c∥1 .                             (7)
+                                        c
+
+Use NNLS only if nonnegative currents are physically justiﬁed. Compare coeﬃcient error, activa-
+tion precision/recall, and ﬁeld residuals. This is a calibration and reproducibility exercise, not a
+new research claim.
+U2: learn experimental noise. Repetitions and current-oﬀ acquisitions can estimate spatial
+variance, correlations, drift, and ﬁtting uncertainty. Subtracting a spatially varying physical ﬁeld
+is not equivalent to measuring noise. Split sessions so repeated backgrounds do not leak. Where
+raw ODMR ﬁts provide covariance, propagate it or use it to weight the observation loss.
+U3: calibrate simulator-to-measurement discrepancy. Match known CAD and drive set-
+tings to measured individual-coil ﬁelds. Fit limited nuisance parameters such as global registration,
+axis angle, gain, and eﬀective distance on a calibration subset. Do not allow a free learned kernel
+to absorb every error. Test ﬁtted corrections on unused coils or sessions.
+U4: experimentally adapt a pretrained ﬁeld prior. Start from COMSOL supervision.
+Use repeated real observations, known source activations, and correctly modelled measurement
+consistency to adapt on an explicit adaptation set. Validate on separate acquisitions. A dictionary-
+generated Dc is a model-based surrogate at the sensor plane, not an independent near-plane truth.
+Shared noisy basis maps can correlate surrogate target and input noise.
+U5: construct a real dictionary LISTA baseline. Train an unrolled sparse-code network for
+c on activation labels and compare with LASSO at matched inference latency. This tests learned
+acceleration and provides a source-aware auxiliary branch. It does not directly establish standoﬀ
+super-resolution. Hold out activation patterns for known-dictionary performance; hold out source
+identities or a new array for geometry transfer.
+U6: validate near-plane reconstruction. If the archive contains registered measurements at
+several calibrated positions, form higher-to-lower-plane test pairs with the same optics. Otherwise
+acquire new height sweeps. Do not invent sharp references by applying your own inverse to the
+archive and then evaluate against them.
+
+
+4.4 Splits that are honest for a single fabricated array
+
+Holding out activation combinations tests combinatorial generalization for known source templates.
+All combinations on one array are not independent new geometries. A shared dictionary may
+be legitimate calibration information in that task, but it must be declared and kept separate
+
+
+                                                 8
+QDM research playbook                                                Joint calibration and reconstruction
+
+
+
+                                      Bathla experimental archive
+                                      audit labels and calibration
+
+
+
+     Basis maps + mixtures                                               Raw/repeated acquisitions
+      dictionary/activation                                                   noise and do-
+            benchmark                                                        main adaptation
+
+
+         Coeﬃcients and                                                    Calibrated height pairs
+        sensor-plane ﬁelds                                                      validate near-
+      are useful supervision                                                  plane prediction
+
+Figure 6: Diﬀerent experimental data support diﬀerent claims. Activate a branch only after the necessary
+metadata and measurements are veriﬁed.
+
+
+from unseen-geometry claims. Use held-out acquisition sessions to test drift. For dynamics, split
+contiguous events/runs and leave guard intervals; neighbouring frames are strongly correlated.
+If a known-coil dictionary is available at test time, report that regime separately from “no per-coil
+calibration.” Holding out a coil while secretly supplying its measured basis is not unknown-source
+generalization. For unseen coils, use CAD-based physical templates or new independent arrays
+and disclose the information provided.
+  Scientiﬁc interpretation
+  A known activation vector can label which source was driven; it does not necessarily give an
+  exact current amplitude or a unique multilayer current map. Model-assisted labels, nominal
+  heights, and independently measured targets should appear as separate evidence tiers.
+
+  Deliverable
+  Produce two manifests, a source/session split ﬁle, a dictionary reproduction report, and a list
+  of missing metadata or acquisitions needed for the primary near-plane claim.
+
+
+
+5 The experiment ladder: investigate before inventing
+
+Each experiment should have a short conﬁguration ﬁle, immutable split identiﬁer, source revision,
+arrays, metrics, and a visual report. Work through E00–E05 ﬁrst. The remaining experiments are
+selected by the observed failure, rather than executed as an indiscriminate architecture sweep.
+
+
+5.1 E00: operator correctness and model discrepancy
+
+Question. Does the observation operator represent the data well enough that a new network is
+scientiﬁcally interpretable?
+Procedure. Check Fourier-mode attenuation, identity at zero gap, nonnegative upward gaps,
+padding/cropping, pixel integration, component projection, and transpose ordering. Verify
+⟨Mh x, r⟩ = ⟨x, M∗h r⟩ on asymmetric grids and masks. Compare the autograd derivative in h with
+centred ﬁnite diﬀerences on a small problem. Compare independent COMSOL high-plane ﬁelds
+with propagated reference ﬁelds, using interior and full-FOV metrics.
+Controls. Increase physical-domain size/padding; reﬁne one representative COMSOL mesh; com-
+
+
+                                                   9
+QDM research playbook                                                     Joint calibration and reconstruction
+
+
+pare registered coordinates. Test double precision on a small case before using GPU ﬂoat32. If
+error changes with window size, do not call it solely simulation noise.
+Output. Adjoint/gradient errors, component residual maps, residual spectra, interior-versus-
+boundary error, and a model-discrepancy summary. This step is a necessary numerical veriﬁcation,
+not a novel result by itself.
+
+
+5.2 E01: known-height reconstruction
+
+Question. What detail is recoverable when calibration is available?
+Run analytic ﬁltered inversion, classical regularized reconstruction, the repository’s LISTA with
+physics corrections, and a small supervised residual CNN or U-Net on the same source split. Use
+the true height only in the explicitly labelled known-height controls. Tune cutoﬀs and penalties
+on validation sources. Evaluate every component, a predeﬁned source ROI, proﬁles, and latency.
+Compare ﬁeld-pixel L1, quadratic smoothness, wavelet sparsity, and vector TV as distinct priors.
+For vector TV one possible deﬁnition is
+                                          s
+                                     X        X
+                        RVTV (x) =                [(Dx xc )2p + (Dy xc )2p ] + ε2TV .                      (8)
+                                      p       c
+
+Choose ﬁnite-diﬀerence spacing in physical units. An arbitrary CNN denoiser is not automatically
+a proximal operator, and its iterations do not inherit FISTA’s convex convergence guarantee.
+  Decision gate
+  If known-height methods cannot recover the target on the pilot, investigate noise, sampling,
+  source prior, or model mismatch before introducing height estimation. A known-height control
+  is an information reference, not a universal accuracy upper bound.
+
+
+
+5.3 E02: intentionally wrong height
+
+Question. How much does calibration error aﬀect reconstruction, and can residuals diagnose it?
+Select low, medium, and high heights from the actual database and multiple independent layouts.
+Sweep assumed height around each true value, subject to h > zref . For an observation at 3 µm,
+an illustrative sweep is 2 to 4 µm with ﬁner samples near 3 µm. Reconstruct to the same declared
+solver tolerance at each candidate. Reuse warm starts only if their eﬀect and timing are recorded.
+Plot reconstruction error, whitened observation mismatch, regularization cost, and feature/proﬁle
+error against assumed height. Repeat at zero noise and two speciﬁed physical noise levels. Show
+cases where a good residual accompanies a poor reconstruction.
+Interpretation. A broad residual valley is consistent with ambiguity; a narrow prior-dependent
+objective minimum does not establish true height. A monotone preference for the lowest permitted
+height may reﬂect the semigroup degeneracy. Use this experiment to set application-relevant error
+tolerances rather than inventing a success threshold after seeing test data.
+
+
+5.4 E03: source–height ambiguity and shortcut detection
+
+Question. Which changes in source parameters can imitate a height change?
+Vary source size, track width, turns, spacing, location, and current independently of height. Find
+nearest observation pairs from diﬀerent layouts/heights using a noise-weighted distance. For Gaus-
+sian noise a likelihood comparison uses the whitened separation Σ−1/2 (y1 − y2 ) ; interpret it
+
+
+                                                    10
+QDM research playbook                                             Joint calibration and reconstruction
+
+
+under the actual covariance and sampling, not raw pixel count. Verify lookalike cases visually and
+using proﬁles.
+Train a minimal height predictor. Evaluate it on held-out size ranges, current amplitudes, and
+shape families. Compare physical units, observation-only normalization with retained amplitude,
+and normalization that discards amplitude. Do not discard amplitude and then conclude that it
+is irrelevant.
+Output. An ambiguity gallery; height error by geometry/current subgroup; predictive spread
+on lookalikes; and a labelled subset of informative versus weakly informative cases. These cases
+should remain ﬁxed for comparing later models.
+
+
+5.5 E04: the two-stage baseline
+
+Question. Is a simple height estimator followed by reconstruction suﬃcient?
+Train a CNN encoder with global pooling and an MLP receiving physical metadata. Predict h
+within the allowed training interval. Feed its estimate to a conditioned reconstructor trained with
+known heights. Evaluate a second variant in which the reconstructor is trained using noisy height
+estimates matching the predictor’s validation errors; otherwise a brittle two-stage baseline can
+make joint inference look unfairly strong.
+Compare height MAE, ﬁeld error, failure rate, and latency with the known-height counterparts.
+Repeat with at least several model seeds once the pilot is stable. Use the same prior capacity and
+training budget wherever feasible.
+
+
+5.6 E05: joint ﬁeld–height reﬁnement
+
+Question. Does feedback between calibration and reconstruction add value?
+Start from the two-stage initialization, then perform a small trained number of physics-and-prior
+reﬁnement stages. Supervise both height and reference ﬁeld on simulation data; include observation
+consistency. Compare (a) frozen height, (b) gradient height updates, and (c) learned residual-based
+height updates. Control total parameter count and inference compute, not only stage count.
+Required ablations. Same reconstruction prior; identical metadata; same dataset; matched
+height initialization; no-reﬁnement model trained end to end; and a larger two-stage model under
+a similar compute budget. Log intermediate heights and errors to detect unstable oscillations or
+drift toward the bound.
+  Decision gate
+  Advance to a novel mechanism only if there is a reproducible residual failure: ambiguity, noise
+  ampliﬁcation, scale mismatch, boundary inconsistency, or simulation-to-real mismatch. If the
+  strong two-stage model solves the task, develop a diﬀerent scientiﬁc claim instead of obscuring
+  it with added modules.
+
+
+5.7 E06: multiple hypotheses and calibrated rejection
+
+Compare one height estimate with a coarse candidate bank and a shared conditional reconstructor.
+Preserve associated pairs (xj , hj ) instead of mixing unrelated image and height averages. Evaluate
+true-height set coverage, interval/set width, conditional coverage by geometry/noise, and the error
+on cases retained at increasing conﬁdence thresholds. Compare with a small ensemble and simple
+grid-search proﬁling.
+For discrete candidates, report the approximation error due to binning and include heights between
+
+
+                                                11
+QDM research playbook                                             Joint calibration and reconstruction
+
+
+training bins. Use a separate calibration set for temperature scaling or conformal adjustments. The
+ability to return broad sets is useful only when informative cases remain narrow and diﬃcult cases
+are reliably ﬂagged.
+
+
+5.8 E07: FOV, pitch, and outside-window contributions
+
+Use a full physical scene as the common parent. Create (i) diﬀerent crops at ﬁxed pitch, (ii)
+diﬀerent pitches at ﬁxed physical FOV, and (iii) diﬀerent FOVs at ﬁxed array dimensions. These
+are three diﬀerent shifts. Integrate and antialias before subsampling. Compare on registered
+common physical regions with documented target-grid conversion.
+Test sources touching the edge and sources just outside the window. Compare zero exterior, in-
+creased latent-domain support, and an explicit nuisance exterior model. Measure interior error,
+edge-band error, overlap disagreement, height bias, and predictive uncertainty. Cropping a propa-
+gated image is not equivalent to propagating a crop.
+
+
+5.9 E08: noise and acquisition robustness
+
+Start with known white Gaussian noise as a controlled experiment, then add correlated noise,
+spatially varying variance, oﬀsets, and drift estimated from real repetitions. Keep physical noise
+level distinct from SNR; increasing height reduces signal even if instrument noise remains ﬁxed.
+Test both ﬁxed-noise and ﬁxed-SNR protocols, labelled separately.
+For repeated measurements, independent noise can support noise-to-noise denoising or adaptation,
+but does not by itself reveal frequencies removed by standoﬀ. Check shared calibration noise,
+ﬁtting-induced spatial correlation, and drift before assuming conditional independence. QDsiM [20]
+provides a noise-aware measurement simulation reference; adopting a simulator alone is not a
+methodological novelty.
+
+
+5.10 E09: COMSOL-to-experiment transfer
+
+Match scalar NV projection versus vector input, units, sensor averaging, and acquisition back-
+grounds. Train on COMSOL, evaluate without adaptation, then compare calibration-only adap-
+tation and learned-prior adaptation on disjoint real sessions. Include a small real-only control
+if independently labelled height pairs are available. Separate gains from registration/calibration
+improvements from gains due to the new architecture.
+
+
+5.11 E10: physical resolution and prior dependence
+
+Deﬁne a controlled feature family: for example two nearby track contributions, a narrow gap, or
+a small perturbation on a known source. Sweep separation and SNR at several heights. Deﬁne a
+detection or proﬁle criterion before locking the test set; report false positives and conﬁdence, not
+just visual sharpness. Compare ordinary interpolation to rule out claims based solely on increased
+output pixels.
+Perturb the learned prior with plausible out-of-distribution layouts. If features appear in the
+reconstruction without support in the measurement, test whether the uncertainty mechanism ﬂags
+them. A successful resolution claim must state the source family and measurement conditions
+under which it holds.
+
+
+
+
+                                                12
+QDM research playbook                                               Joint calibration and reconstruction
+
+
+5.12 E11: optional sensor tilt and eﬀective averaging
+
+If constant-height inference fails systematically across the FOV, use a low-dimensional tilted plane
+h(x, y) = h0 + ax + by. Evaluate the physical ﬁeld on the nonplanar measurement coordinates and
+rotate the projection axis consistently when required. A spatial height map is not implemented by
+naively applying a diﬀerent local convolution at each pixel. Compare with a scalar eﬀective-height
+model on controlled simulated tilt and independently characterized acquisitions.
+
+
+5.13 E12: optional multilayer source separation
+                                                  P
+Only after single-layer validation, model y = ℓ Mhℓ xℓ + η, preferably with structural source
+priors or known template families. Use the Bathla dictionary as the known-source baseline. Add
+continuous depth/position corrections and test dictionary mismatch. Report cross-talk, activity
+errors, layer-parameter uncertainty, and information supplied at inference. Arbitrary layer images
+at arbitrary depths are not uniquely identiﬁable from one sum.
+
+                                              E00–E01
+                                          Trusted physics +
+                                        known-height baseline
+
+
+                                              E02–E04
+                                        Wrong-height and am-
+                                         biguity diagnostics
+
+
+                                                 E05
+                                           Joint prototype
+                                         with strong controls
+
+
+
+             E06 or E07                                                         E08–E10
+            One failure-                                                   Noise, real data, re-
+         driven mechanism                                                   liable resolution
+
+Figure 7: A research ladder with decision gates. E11–E12 are optional extensions, not prerequisites for
+completing the ﬁrst paper.
+
+  Deliverable
+  Maintain one experiment ledger with IDs E00–E12, question, control, split, conﬁguration
+  hash, primary metrics, ﬁgure, conclusion, and next decision. A failed hypothesis is retained
+  with its evidence.
+
+
+
+6 What architectures to learn, build, and compare
+
+6.1 A learning order tied to implementation milestones
+
+
+
+
+                                                  13
+QDM research playbook                                              Joint calibration and reconstruction
+
+
+
+ Learn in order    Concept and reference                 Implement and explain before moving
+                                                         on
+ 1. Proximal       ISTA/FISTA and LISTA [1];             Derive the gradient, adjoint, shrinkage,
+ inference         ALISTA [2]                            and step bound; distinguish
+                                                         optimization error from ﬁeld error.
+ 2. Residual       Signed regression and residual        A small known-height ﬁeld
+ CNN               prediction                            reconstructor; linear output, correct
+                                                         units, sensible initialization.
+ 3. U-Net          Multiscale encoder/decoder with       Compare local CNN and multiscale
+                   skip paths [3]                        context; separate architecture choice
+                                                         from supervised training target.
+ 4.                Feature modulation, e.g.              Condition on physical
+ Conditioning      FiLM [4]                              height/pitch/noise, and prove with an
+                                                         ablation that metadata improves
+                                                         transfer.
+ 5. Learned        MoDL [5] and VarNet [6] as            Combine a learned prior with the exact
+ data              transferable patterns                 measurement operator, including crop
+ consistency                                             and projection.
+ 6. Blind          Joint image/operator                  A bounded height update; diagnose
+ inference         estimation [11]                       prior-dependent calibration and
+                                                         degenerate solutions.
+ 7. Uncertainty    Calibration [12]; conformal           Coverage and sharpness on a held-out
+                   prediction [13]                       calibration set; detect distribution-shift
+                                                         failures.
+ 8. Optional       DIP [8], plug-and-play [9],           Try only when the current failure
+ priors            FNO [10]                              suggests scan-speciﬁc ﬁtting, stronger
+                                                         priors, or operator transfer.
+
+
+For each reading, write half a page: variables estimated, prior, measurement operator, information
+supplied at test time, data split, and a failure relevant to QDM. Architecture labels do not replace
+this analysis.
+
+
+6.2 A0: reproduce the existing physics-correction LISTA
+
+The repository currently uses
+
+                         xk+1 = softθ [xk − αA∗ (Axk − y) + Cb y + Cx xk ] .                        (9)
+
+Its two bias-free 9 × 9 single-channel corrections and scalar threshold are tied across layers. It
+has 163 trainable parameters, and zero corrections reproduce ISTA at initialization. H is ﬁxed in
+the current checkpoint/operator. Supervision targets sharp ﬁelds rather than sparse-optimization
+solutions; the distinction from original LISTA [1] matters.
+Useful ﬁrst ablations. Train versus zero correction; tied versus untied thresholds; input correc-
+tion versus state correction; scalar versus per-component threshold; same physical prior at several
+trained depths; blurred versus zero initialization. Compare accuracy–latency curves. A trained
+layer has extra convolutions, so it is not equal in cost to an ISTA iteration. Preserve the trained-
+depth restriction and do not infer convergence of learned updates.
+A controlled LISTA study you can run before the joint model. Use trained depths
+K ∈ {4, 8, 16} as an illustrative pilot grid, and compare (i) ﬁxed true-height ISTA/FISTA, (ii)
+
+                                                 14
+QDM research playbook                                              Joint calibration and reconstruction
+
+
+zero-correction LISTA, (iii) trained tied corrections, (iv) learn only steps/thresholds, and (v) un-
+tied corrections. Log ﬁeld error after each trained stage, physical residual, learned parameter
+changes, inference memory, and latency. Select the depth on validation sources. The ﬁxed-depth
+classical controls diagnose acceleration; epsilon-stopped classical controls diagnose optimization.
+They answer diﬀerent questions and should both be reported.
+A learned-FISTA control can introduce bounded trained momentum into the same physics update.
+Treat it as a ﬁxed-depth network; classical FISTA guarantees do not automatically apply to learned
+momentum or learned priors. If a compact step/threshold model matches a larger correction
+network, that is evidence to simplify the prior, not a reason to hide the smaller control.
+
+
+6.3 A0b: coeﬃcient LISTA for the Bathla dictionary
+
+This is a distinct task with a genuinely sparse representation:
+                                                                        
+                            ck+1 = softτk ck + αk DT W T W (y − Dck ) .                           (10)
+
+Learn bounded steps/thresholds ﬁrst, then consider learned corrections. Inputs are measured
+projected maps; outputs are coil coeﬃcients. Compare with LASSO, ridge, and applicable sign-
+constrained ﬁts using activation labels. Derive near-plane ﬁelds only through independently val-
+idated physical source templates. A measured sensor-plane basis cannot itself supply a sharp
+reference-plane basis.
+
+
+6.4 A1: supervised residual CNN and U-Net controls
+
+Use a small residual CNN with approximately 4–6 convolutional blocks and 32–64 feature channels
+as an initial engineering conﬁguration. A U-Net control can use 3–4 scales and comparable capacity.
+Predict x̂ = x0 +Rθ (y, m) with a linear ﬁnal layer, where m is metadata and x0 is a declared physical
+or observation-derived initialization.
+Train from scratch on magnetic data. Natural-image priors and pretrained RGB weights can
+impose unsuitable textures. Do not use sigmoid output for signed microtesla ﬁelds. Avoid hidden
+resizing, instance normalization that discards meaningful amplitude, and random-crop training
+that silently changes the forward boundary conditions. Compare ﬁxed amplitude metadata versus
+observation normalization with scale retained.
+Learn that a convolutional architecture is not automatically FOV/pitch invariant: a 9 × 9 kernel
+spans diﬀerent physical distances as pitch changes. Global pooling for height estimation can also
+hide how much of a source is visible. Test these issues rather than claiming invariance from variable
+tensor dimensions.
+
+
+6.5 A2: known-height conditioned physics network
+
+Let rk = Mh xk − y, and deﬁne
+
+                                 uk = xk − αk M∗h W T W rk ,                                      (11)
+                               xk+1 = uk + Rθ (uk , M∗h W T W rk ; m).                            (12)
+
+Condition the learned correction using a small metadata MLP. One FiLM-style implementation
+modulates feature channel j by γj (m)zj + βj (m). Proposed metadata include physical ∆x, ∆y,
+gap, noise estimates, amplitude scale, projection/channel availability, and observation mask. Stan-
+dardize metadata using training statistics.
+Start with 6–8 stages, tied correction weights, and a conservative bounded step. These are pi-
+lot choices, not optimal hyperparameters. In a whitened problem the norm bound includes W ,
+
+                                                 15
+QDM research playbook                                                    Joint calibration and reconstruction
+
+
+sampling, and projection; do not reuse the bound for an unweighted convolution. Removing con-
+ditioning, physics gradients, or stage tying gives informative controls.
+An alternative MoDL-style data-consistency block solves
+                      (M∗h W T W Mh + ρI)xk+1 = M∗h W T W y + ρDθ (xk ; m)                              (13)
+approximately using conjugate gradients. For padded/cropped operators, apply the true composi-
+tion rather than replacing it by multiplication with |H|2 . Report CG accuracy and its contribution
+to runtime; keep ρ > 0.
+
+
+6.6 A3: a strong two-stage calibration baseline
+
+A height encoder produces h0 = hmin + (hmax − hmin ) sigmoid(sϕ (y, m)). Deﬁne this admissible
+physical interval independently of the training range; it can be broader than the training heights.
+Extrapolation tests must remain within the declared interval, and observations outside it are
+ﬂagged as unsupported. Feed the estimate to A2. Train the predictor on true simulation labels
+and the reconstructor ﬁrst on correct heights, then on realistic predictor errors. Jointly training
+the two blocks without iterative height feedback is a stronger control than freezing a poorly trained
+predictor.
+For a scalar NV input, use the proper projection in Mh and a channel-availability mask. Vector
+outputs inferred from a scalar image require corresponding physical assumptions and can only be
+validated in channels with trusted reference data. Do not use current amplitude, source CAD, or
+true height in the network unless the inference regime declares them available.
+
+
+6.7 A4: joint reﬁnement prototype
+
+Given (xk , hk ), perform the A2 ﬁeld update and reﬁne height. A physics-only candidate is
+                                   gh,k = ⟨W rk , W ∂h Mhk xk ⟩ ,                                       (14)
+                                  hk+1 = Π[hmin ,hmax ] (hk − βk gh,k ).                                (15)
+An alternative learns a bounded correction from rk , xk , metadata, and residual spectral summaries.
+Use explicit supervision for h and x during simulation training. The residual gradient is a useful
+feature, but does not resolve non-identiﬁability by itself. A learned source prior or source-latent
+representation supplies additional restrictions.
+Do not change the analytical operator with unconstrained learned ﬁlters and simultaneously call
+the resulting scalar a physical distance. If adding Heﬀ = Hh + ∆Hψ , bound and calibrate ∆Hψ ,
+check Hermitian symmetry/reality, and test whether the correction absorbs height. Compare the
+pure analytical model, a calibration-only correction, and a trained correction on source/session
+holdouts.
+
+
+6.8 A5: a candidate bank for ambiguous height
+
+Choose an initial set of plausible heights {hj }Jj=1 and share the A2 reconstructor across candidates.
+Predict or optimize a ﬁeld xj for each, then score the pairs using measurement likelihood and a
+learned source prior. A conceptual Bayesian score is
+                                                             2
+                 log p(hj , xj | y) ∝ − 12 W (Mhj xj − y)        + log pθ (xj ) + log p(hj ).           (16)
+This equation is not a justiﬁcation for calling arbitrary network logits a posterior. If pθ is unavail-
+able as a normalized density, label scores as predictive weights and calibrate empirically. Height
+classiﬁcation on true labels is a simple initial implementation. Then test continuous reﬁnement,
+bin-width eﬀects, and branch collapse.
+
+                                                   16
+QDM research playbook                                                   Joint calibration and reconstruction
+
+
+
+
+                                       y, pitch, projection, noise
+                                       encoder initializes (x0 , h0 )
+
+
+                                         True forward/adjoint
+                                           compute rk and
+                                            ﬁeld gradient
+
+
+
+      Conditioned learned prior                                            Bounded height reﬁnement
+            update xk+1                                                          update hk+1
+
+
+
+                                           Repeat a trained
+                                           number of stages
+                                          return ﬁeld and cal-
+                                           ibration estimate
+
+Figure 8: Proposed joint prototype. The exact operator handles known physics; the learned block encodes
+a data-dependent prior. Both height and reconstruction are trained and evaluated explicitly.
+
+
+
+
+                                       Observed map + metadata
+
+
+
+
+              h1                                   h2                                     hJ
+     shared inverse → x1                  shared inverse → x2                    shared inverse → xJ
+
+
+
+                                          Pair scoring + held-
+                                            out calibration
+
+
+                                             Height set and
+                                            associated ﬁelds
+                                             one mode only
+                                            when supported
+
+Figure 9: A proposed uncertainty-aware inference route. Compare its extra compute with ensembles,
+proﬁling, and a stronger single-branch model. Candidate pairs should not be collapsed into unrelated mean
+image and mean height values.
+
+
+
+
+                                                    17
+QDM research playbook                                              Joint calibration and reconstruction
+
+
+6.9 A6: uncertainty-sensitive spectral reﬁnement
+
+This is a hypothesis motivated by E02–E03, not a veriﬁed new method. For a gap uncertainty σh ,
+deﬁne sensitivity s(f ) = 2π ∥f ∥ σh . A provisional gate might be w(f ) = 1/(1 + s(f )2 ), multiplied
+into the Fourier transform of a physics-gradient correction. Alternatively learn a gate conditioned
+on estimated spectral SNR, height distribution, and pixel spacing.
+Test ﬁxed low-pass gates, gates from true height error as an oracle diagnostic, and gates from
+predicted uncertainty. Gates can stabilize updates but also remove real detail. Derive their eﬀect on
+signed spectra, test feature false negatives, and compare under matched compute. Cropping means
+this frequency operation is an approximate reﬁnement/preconditioner, not an exact diagonalization
+of the whole observation operator.
+The candidate contribution is justiﬁed only if predicted uncertainty improves reliable detail recov-
+ery beyond simpler ﬁltering and existing conditioned priors. Do not claim that a hand-selected
+gate is physically optimal.
+
+
+6.10 A7: current-latent inference as a stronger physical prior
+
+Predict a current stream function or parametrized conductor source, compute J, then use Biot–
+Savart to predict the measurement and the reference-plane ﬁeld. Train the primary loss on the
+near-plane ﬁeld. Where COMSOL supplies trusted J, add auxiliary current supervision as an
+explicitly available training signal. Compare with a ﬁeld-ﬁrst network receiving the same data.
+This representation reduces implausible independent-component outputs, but its assumptions may
+fail for contacts, ﬁnite thickness, vertical vias, or unknown multilayer sources. Geometry masks
+can be known metadata in one regime and unknown in another; report separate results. Recovering
+a latent J that ﬁts the ﬁeld does not prove unique current recovery.
+
+
+6.11 Optional architectures: when they are worth trying
+
+ Method              Use when                                 Main risk/control
+ NAFNet-style        Need a strong eﬃcient CNN baseline       Retrain for signed ﬁelds; compare
+ restoration [7]                                              physics integration and compute
+ Plug-and-play       A magnetic-ﬁeld denoiser is reliable     Denoiser need not minimize a
+ prior [9]                                                    known energy; test stability
+ Deep Image          Paired sharp real data are scarce        Scan-speciﬁc optimization can ﬁt
+ Prior [8]                                                    noise; stopping cannot use test truth
+ Fourier neural      Resolution transfer remains a            Mode truncation, domain extent,
+ operator [10]       dominant failure                         boundaries, and aliasing still matter
+ Transformer or      Long-range source context matters        More capacity is not novelty;
+ hybrid              beyond U-Net                             matched strong CNN control
+ Diﬀusion/score      Multimodal source inference needs        Training/compute cost and plausible
+ prior [11]          richer priors                            hallucinations; posterior calibration
+
+
+6.12 How to turn a failure into an architectural hypothesis
+
+Use this chain: observation → mechanism → minimal change → controlled experiment → falsiﬁ-
+able claim. Example: the predictor confuses source width with distance; therefore test separate
+height hypotheses coupled to one physical inverse, and measure whether ambiguous cases receive
+
+
+
+                                                 18
+QDM research playbook                                                 Joint calibration and reconstruction
+
+
+calibrated broad sets while ordinary cases retain accuracy. Compare against simply adding capac-
+ity.
+For the ﬁrst paper, the recommended route is A0/A1/A2 controls → A3 → A4 → one of A5
+or A6 if the failures warrant it. A7 is a useful parallel scientiﬁc control when COMSOL current
+data are available; it should not double the entire project scope. Prior-informed joint calibration,
+FiLM, unrolling, ensembles, and diﬀusion are established ideas. Novelty must lie in an identiﬁable
+mechanism, analysis, and empirical evidence relative to relevant prior work, not the module names.
+  Deliverable
+  Keep a model card for every architecture: available inputs, estimated variables, prior, ex-
+  act operator, trainable parameters, stage count, training objective, supervision, calibration
+  method, latency, and excluded claims.
+
+
+
+7 Training objectives and reliable evaluation
+
+7.1 Supervision should match the intended claim
+
+For each simulation scene, store the reference ﬁeld x⋆ , observation y, true h⋆ , metadata m, and
+source identity. Where relevant store J ⋆ , but distinguish it from the main ﬁeld target. A proposed
+supervised objective is
+
+                          L = Lx + aLh + bLobs + cLaux ,                                             (17)
+                                 ∥x̂ − x⋆ ∥2                                 
+                         Lx =                     ,   Lh = Huber (ĥ − h⋆ )/sh ,                     (18)
+                                 ∥x⋆ ∥2 + ϵ   x
+                                 1               2
+                        Lobs =     W (Mĥ x̂ − y) .                                                  (19)
+                                 n
+Use a ﬁxed training-derived ﬂoor ϵx for weak scenes and report such scenes separately. The scale
+sh makes height supervision interpretable. An auxiliary current loss is used only when a trusted
+current target exists. Loss weights are selected with the validation protocol, not the locked test
+set.
+For noisy targets, a noise-weighted likelihood is preferable to ﬁtting every sample exactly. Estimate
+W from calibration/repetitions, or use a speciﬁed synthetic covariance. Pixel independence and
+Gaussianity are assumptions, not consequences of a histogram. Finite-window model discrepancy
+can require a separate nuisance or robust residual model; inﬂating noise variance to hide every
+mismatch invalidates a physical accuracy claim.
+
+
+7.2 Curriculum and optimization
+
+1. Verify the forward/adjoint and height derivatives on tiny arrays.
+2. Train A2 with known height on a stratiﬁed pilot. Inspect gradients, sign/amplitude conservation,
+   and per-component errors.
+3. Train the height predictor independently. Log error by source size/current and compare simple
+   spectral features.
+4. Train A3 end to end, including realistic height perturbations. This becomes the principal simple
+   baseline.
+5. Initialize A4 from A3; enable bounded height reﬁnement. Start with modest stage count and
+   monitor each stage.
+
+                                                      19
+QDM research playbook                                             Joint calibration and reconstruction
+
+
+6. Add one failure-driven mechanism. Reﬁt or freeze shared components according to an explicit
+   ablation plan.
+7. Expand COMSOL coverage, then add real calibration/adaptation on disjoint sessions.
+
+Adam or AdamW is a reasonable pilot optimizer; an illustrative initial learning-rate grid is 10−4 to
+10−3 , with separate rates for small calibration heads if needed. Do not transfer the magnetization
+paper’s optimization schedule without justiﬁcation. Select architecture depth and epoch budget
+from validation learning curves. Prefer a short pilot over a large unsuccessful sweep.
+For learned updates, ﬁx the trained depth at inference unless extrapolation is itself evaluated.
+Classical solvers use the repository’s optimality-based stopping criterion with their actual update
+counts and stop reasons. Ground truth is used for reporting and supervised training, never for
+classical stopping or per-test regularizer selection.
+
+
+7.3 Losses to add only with a reason
+
+Edge/proﬁle losses can prioritize narrow features but amplify target interpolation artifacts. Spec-
+tral losses require a deﬁned physical frequency grid and a reliability mask. SSIM is an optional
+supplementary metric; its data range and component treatment must be ﬁxed. A reconstruction
+that looks plausible while changing amplitudes may score well perceptually and still be scientif-
+ically wrong. Avoid an adversarial loss until ﬁeld amplitude, sign, and uncertainty are already
+controlled.
+For vector ﬁelds, a physically constrained latent potential/source may be stronger than an arbitrary
+penalty on components. A two-dimensional ﬁnite-diﬀerence divergence of (Bx , By ) is not the full
+three-dimensional condition ∇ · B = 0; the missing ∂z Bz matters. Enforce the appropriate source-
+free Fourier relations or full forward model rather than an incorrect 2D surrogate.
+
+
+7.4 Uncertainty: what to predict and how to check it
+
+Distinguish measurement noise (aleatoric), source ambiguity, training uncertainty, and discrepancy
+in the measurement model. A small ensemble can probe model variability, but it is not a guarantee
+of Bayesian coverage. For a discrete height distribution, report cross-entropy or NLL, Brier score
+or reliability bins, height set coverage, and set width. For continuous estimates use calibrated
+intervals, coverage versus nominal conﬁdence, and sharpness.
+Conformal calibration [13] provides marginal coverage under its exchangeability assumptions. Hold-
+ing out an entirely diﬀerent source family or instrument can violate those assumptions. Report
+subgroup coverage under these shifts rather than implying a distribution-free guarantee still holds.
+Calibration and model selection must use separate data or a justiﬁed cross-validation scheme.
+Deﬁne a selective decision: accept a single-height reconstruction only when a calibrated height
+set and candidate ﬁelds are suﬃciently concentrated under a criterion ﬁxed on calibration data.
+Otherwise return the candidate set or label the result ambiguous. Evaluate the error–coverage
+curve as more diﬃcult cases are rejected. Rejection must not remove all useful scenes.
+                                                           P
+For a pair distribution with weights wj , the ﬁeld mean x̄ = j wj xj can minimize squared ﬁeld risk,
+        P
+but (x̄, j wj hj ) need not be a physically coherent single explanation. Retain pairwise predictions
+for interpretation and repropagation.
+
+
+7.5 Metrics and plots to standardize
+
+
+
+
+                                                20
+QDM research playbook                                              Joint calibration and reconstruction
+
+
+
+ Quantity               Deﬁnition/use                                Interpretation warning
+                        p
+ Physical RMSE              mean(x̂ − x⋆ )2 in µT                    Report components and
+                                                                     predeﬁned ROI
+ Relative L2            ∥x̂ − x⋆ ∥ / ∥x⋆ ∥                           Unstable for negligible
+                                                                     references; stratify
+ Range NRMSE            RMSE divided by reference range              Large backgrounds and
+                                                                     extreme pixels aﬀect it
+ Height MAE/bias        mean |ĥ − h⋆ | and signed bias in µm        Nominal/ﬁtted labels are not
+                                                                     exact truth
+ Proﬁles/features       Peak amplitude, width, gap/separation,       Predeﬁne proﬁle locations and
+                        sign                                         criteria
+ Observation ﬁt         Whitened residual and spatial/spectral       Small residual does not prove
+                        structure                                    correct height
+ FOV consistency        Registered disagreement on common            Common crop agreement can
+                        physical support                             hide common bias
+ Uncertainty            Coverage, set/interval width, selective      Validate under source and
+                        error                                        session shift
+ Latency/resources      Warmed synchronized median and               Include height
+                        dispersion; memory                           search/calibration stages
+
+
+Compute errors in physical units after reversing normalization. Report whole-FOV, interior, and
+source-region results with masks deﬁned from CAD or independent training rules, not selected to
+hide errors. For scalar real measurements, report measured-projection accuracy and reserve vector
+claims for independently validated channels.
+
+
+7.6 A small evaluation matrix
+
+ Test regime            What changes                            Principal question
+ In-distribution        New source instances, familiar          Basic estimator quality
+                        ranges
+ Geometry shift         Withheld topology/family or             Does the prior generalize?
+                        width/size range
+ Height shift           Interpolation and extrapolation         Is calibration physically
+                        separately                              conditioned?
+ Sampling shift         Pitch or grid size, declared FOV        Does scale information transfer?
+ FOV shift              Edge/exterior sources, partial          Are boundary assumptions
+                        views                                   appropriate?
+ Noise shift            Covariance, variance, drift             Is the estimator robust and
+                                                                calibrated?
+ Real shift             New coil/session/instrument where       Does simulated training transfer?
+                        possible
+
+
+7.7 Statistics, fairness, and reproducibility
+
+Use the physical scene/source or acquisition session as the unit of replication. Bootstrap paired
+method diﬀerences across sources, not millions of pixels as independent samples. Begin with at
+
+
+                                                    21
+QDM research playbook                                               Joint calibration and reconstruction
+
+
+least three model seeds for the ﬁnal selected variants if compute permits; report seed variability
+separately from source variability. Predeclare the primary endpoint and show conﬁdence intervals,
+failure cases, and practical eﬀect sizes.
+For timing, use identical hardware, dtype, batch size, output resolution, and observation informa-
+tion. Include candidate height search and uncertainty branches in total inference latency. Report
+training/calibration cost separately. A model with true height as input is an oracle diagnostic;
+label it clearly and do not mix it with unknown-height competitors. A method with test-time
+CAD or per-coil calibration has additional information and needs a separate evaluation regime.
+Save hashes for data manifests, splits, source code, checkpoints, and conﬁgurations. Record GPU
+model, software versions, numerical precision, stage counts, seeds, convergence outcomes, and any
+padding/support assumptions. Use fresh output directories; retain archived runs. A negative
+result is saved with its explanation rather than overwritten by a more favourable sweep.
+  Deliverable
+  A single evaluation script should produce component/ROI metrics, height distributions, un-
+  certainty calibration, feature proﬁles, paired conﬁdence intervals, timing, and an HTML or
+  PDF report from saved arrays. The test set is not a hyperparameter dashboard.
+
+
+
+8 Experimental validation with the real microscope
+
+8.1 Plan the ﬁrst campaign around one falsiﬁable claim
+
+The ﬁrst campaign should ask whether an unknown-height reconstruction improves a registered
+closer-plane prediction for sources excluded from ﬁtting/adaptation. Start with a few indepen-
+dently identiﬁable coil layouts, several sensor positions, repeated acquisitions, and at least two
+acquisition sessions if practical. Scale the number after a pilot establishes repeatability and uncer-
+tainty; a suggested count is an engineering starting point, not a statistical power calculation.
+For the archived multilayer array, use individual-coil activations to begin with a single active source
+and the corresponding background subtraction. Check whether routing, contacts, or wire bonds
+introduce sources between reference and sensor planes; simple source-free upward continuation is
+valid only above all relevant sources. A known layer depth can parameterize hℓ = d0 + zℓ , but the
+common oﬀset d0 still needs calibration or explicit inference.
+
+
+8.2 A measurement protocol
+
+1. Select a known layout and measure actual drive current, including sign and possible heating
+   dependence. Record the source reference surface and relevant layer thicknesses.
+2. Record a reference/background acquisition with the same optics, microwave settings, and sensor
+   conﬁguration.
+3. Acquire the closest usable plane, followed by several larger relative gaps. Record stage displace-
+   ment, approach direction, mechanical repeatability, and drift.
+4. At each position acquire repetitions or retain raw traces suﬃcient to estimate ﬁtting noise and
+   covariance. Keep timestamps and acquisition order.
+5. Repeat a subset at another session and on withheld layouts. Fit registration/calibration using
+   designated calibration acquisitions, not every test target.
+6. Construct registered observation–reference pairs only after checking coordinate transforms, mag-
+   niﬁcation, projection axes, ﬁeld units, and averaging.
+
+                                                  22
+QDM research playbook                                              Joint calibration and reconstruction
+
+
+8.3 What counts as height ground truth
+
+A calibrated stage increment establishes a relative displacement. It does not independently deter-
+mine NV implantation depth, physical contact gap, surface spacer thickness, or sample tilt. Report
+absolute height only where the complete reference is independently characterized, with error bars.
+Otherwise evaluate relative-gap estimation and near-plane prediction, and describe ﬁtted absolute
+distance as model-dependent.
+The magnetization study [18] is a useful conceptual reference for joint calibration with a physical
+prior, but its material model is not a coil prior. Its source-dependent calibration illustrates why
+nominal, model-ﬁtted, and independently measured distances belong in separate columns of the
+experimental report.
+
+
+8.4 Near-plane reference versus optical-free ﬁeld
+
+If the closest measured image retains the optical PSF and NV-depth averaging, then it is a target
+for standoﬀ improvement under the same instrument, not automatically the true unblurred ﬁeld
+at 0.5 µm. Matching optics across height pairs helps isolate magnetic propagation, but changes
+in focus, magniﬁcation, and averaging must be logged. COMSOL near-plane truth is a separate
+evidence tier.
+For the ﬁrst paper, report both simulated ﬁeld-truth accuracy and experimental closer-plane mea-
+surement accuracy. Do not present the latter as complete optical deconvolution. If the physical
+zref cannot be measured directly, state that restriction and validate the accessible target plane.
+
+
+8.5 Domain adaptation without target leakage
+
+Use an adaptation split of real coils/sessions. Fit low-dimensional nuisance calibration ﬁrst: regis-
+tration, axis, gain, and relevant averaging. Then evaluate whether adapting the learned prior adds
+value beyond that calibration. Record all test-time optimization steps and include them in timing.
+Repeated noisy acquisitions can train a denoising consistency term if the source is unchanged and
+noise assumptions are supported. Unsupervised repropagation constrains the measurement but
+leaves the joint height–source ambiguity; combine it with validated priors or calibration information.
+A model trained against its own reconstruction cannot establish independent sharp-ﬁeld accuracy.
+
+
+8.6 Multilayer extension and useful acquisition design
+
+When source drive is controllable, temporal coding can produce genuinely useful independent
+source information. Known, distinguishable excitation waveforms let you demodulate components
+before reconstructing each contribution. Design codes to improve conditioning under measured
+noise and acquisition budget, rather than merely collecting more redundant height planes. Test
+cross-talk and synchronization error. This can be a later co-design contribution, but dynamic
+source ﬁtting itself already exists in the group dataset.
+
+
+9 A manageable 4–6 month work plan
+
+
+ Period           Main work                                  Exit evidence
+ Weeks 1–2        COMSOL audit; source splits;               Trusted physics, wrong-height curves,
+                  E00–E03; request archive metadata          ambiguity examples
+
+
+                                                 23
+QDM research playbook                                            Joint calibration and reconstruction
+
+
+
+ Period          Main work                                 Exit evidence
+ Weeks 3–4       E01/A0–A2; prior comparison; pilot        Strong known-height controls and
+                 learning curves                           quantitative failure diagnosis
+ Weeks 5–6       A3 and A4; E04–E05; matched               Demonstrated beneﬁt or rejection of
+                 compute controls                          joint reﬁnement
+ Weeks 7–9       One candidate mechanism (A5 or A6);       A falsiﬁable contribution with
+                 independent literature check              matched ablation
+ Weeks 10–12     E07–E09; real-data                        Transfer study and stable
+                 calibration/adaptation; acquisition       experimental protocol
+                 pilot
+ Weeks 13–16     Locked evaluation; resolution and         Independent evidence, failure cases,
+                 uncertainty; new height pairs             reproducibility
+ Weeks 17–20     Paper draft; targeted reviewer-style      Complete manuscript and
+                 objections; additional controls           documented limitations
+ Weeks 21–24     Buﬀer for acquisition, revisions,         A venue-ready claim matched to
+                 release, and submission                   actual results
+
+
+Dates are a planning range, not a promise. Conduct the real-data audit and acquisition scheduling
+early because external storage, calibration, and instrument time can be the critical path. Every
+week should yield a ﬁgure, table, operator check, or written decision rather than only more code.
+
+
+9.1 Weekly operating rhythm
+
+1. Write one question and a predicted outcome on Monday.
+2. Run the smallest controlled experiment capable of disproving it.
+3. Inspect source-level distributions, residuals, and diﬃcult examples.
+4. On Friday write a one-page conclusion with the next decision.
+5. Discuss that page with collaborators; update the experiment ledger.
+
+Limit active modelling changes to one at a time. When a result fails, decide whether the cause
+is measurement physics, optimization, source prior, or unavailable information before changing
+capacity. The strongest result may be a reliable failure detector or a well-supported resolution
+limit rather than a larger neural network.
+
+
+10 From a prototype to a publishable contribution
+
+
+
+
+                                                24
+QDM research playbook                                               Joint calibration and reconstruction
+
+
+
+                Known drive/layout         Calibration and            Height sweep
+                and source identity         background               and repetitions
+
+
+                                                Locked
+                Field, distance, and                                Registration and
+                                            source/session
+                reliability evidence                                  noise audit
+                                             test protocol
+
+Figure 10: New acquisitions complement the archive. Every arrow represents a recorded processing step,
+so measurement improvements and network improvements can be separated.
+
+
+10.1 Write the evidence chain before the paper title
+
+ Proposed claim           Evidence required                     Main counterexample to test
+ Joint inference helps    A3 versus A4 with matched             A larger or error-robust two-stage
+                          data/prior/compute                    baseline wins
+ Handles ambiguity        Calibrated height sets; selective     High conﬁdence on lookalike
+                          error                                 unseen sources
+ Generalizes              Source/family/FOV/pitch               Hidden layout or amplitude
+ physically               holdouts                              shortcuts
+ Improves real QDM        Independent sessions/height pairs     Gains explained solely by
+                                                                registration
+ Recovers ﬁner detail     Deﬁned feature task with false        Plausible unsupported structure
+                          positives
+
+
+10.2 Novelty audit
+
+For each proposed mechanism search both QDM/NV work and the broader inverse-imaging liter-
+ature. Joint source–height ﬁtting, unrolling, conditioning, Bayesian priors, and diﬀusion already
+have precedent. Write a comparison table of estimated variables, observation assumptions, prior,
+uncertainty, calibration, and evaluation regimes. The most important question is “what can our
+method do reliably that these methods cannot under comparable information?”
+Potential contributions are magnetic reﬁnement informed by uncertainty, joint source and height
+inference with calibrated rejection, or an explicit treatment of unknown sources outside the FOV.
+These are research hypotheses. Validate novelty before writing “ﬁrst” or “unexplored.” A physi-
+cally rigorous benchmark can be valuable, but a narrow same-sample training score is insuﬃcient
+evidence for the proposed generalization claim.
+
+
+10.3 The minimum convincing paper package
+
+1. One clearly deﬁned problem and primary output, with observational information speciﬁed.
+2. One central new mechanism or analysis, motivated by a reproducible baseline failure.
+3. A simulation benchmark split by source identity/family and a real validation protocol.
+4. Strong classical, direct-learned, two-stage, and joint controls under comparable information.
+5. Ablations, calibration sensitivity, geometry/noise challenge sets, source-level statistics, and hon-
+   est failure cases.
+
+
+
+                                                  25
+QDM research playbook                                            Joint calibration and reconstruction
+
+
+6. Available code/conﬁgurations/splits, or a documented substitute release if raw experimental
+   data cannot be shared.
+
+Suggested paper ﬁgures: (1) ambiguity and task; (2) observation model and architecture; (3)
+wrong-height sensitivity; (4) baseline and joint comparisons; (5) unseen geometry/FOV/pitch; (6)
+uncertainty and selective risk; (7) experimental closer-plane predictions and proﬁles. Use only the
+ﬁgures supporting the actual central claim. Each caption should specify data provenance, split,
+physical units, and what information the method received.
+
+
+10.4 Venue strategy and dated deadline snapshot
+
+The following are planning judgments, not acceptance requirements or guarantees. Deadlines
+were checked against the linked oﬃcial pages on 8 October 2026 and must be rechecked before
+submission.
+
+ Venue              Deadline/status                    Best emphasis for this project
+ CVPR 2027          Registration 10 Nov 2026;          Broadly useful blind-inference mechanism
+                    paper 16 Nov 2026, AoE [21]        with strong physical and experimental
+                                                       evidence; this imminent cycle is a stretch
+                                                       for a new 4–6 month study.
+ ICCV 2027          Paper deadline not conﬁrmed        Mature method, ambiguity analysis,
+                    on oﬃcial page [22]                comprehensive transfer and real-data
+                                                       validation.
+ ICCP 2027          Paper deadline not conﬁrmed        Physics, observation modelling,
+                    on oﬃcial website [23]             self-calibration, and a new computational
+                                                       imaging capability.
+ ICIP 2027          31 Mar 2027 in IEEE SPS            Focused reconstruction mechanism with
+                    listing; cutoﬀ time                strong image/ﬁeld evaluation and
+                    unconﬁrmed [24]                    eﬃciency.
+ ICASSP 2027        Regular deadline 23 Sep 2026       A future cycle: inference/optimization
+                    has passed [25]                    method, robustness, and justiﬁed
+                                                       mathematical analysis.
+ EUSIPCO 2027       6 Feb 2027 [26]                    Compact technical contribution;
+                                                       calibration or dictionary-mismatch
+                                                       inference.
+ Quantum 2.0        9 Feb 2027 [27]                    Experimental quantum-sensing
+ 2027                                                  improvement with quantiﬁed physical
+                                                       beneﬁt.
+
+
+CVPR’s review period overlaps the EUSIPCO deadline; do not plan simultaneous submission of
+substantially the same paper where prohibited. Workshop paper calls are distinct from workshop-
+proposal deadlines. An experimental sensing talk and an archival algorithm paper also have dif-
+ferent publication requirements; check the actual call and prior-publication policy before planning
+both.
+
+
+10.5 When to stop adding experiments
+
+Stop architectural expansion when the central claim has reproducible support, strong alternatives
+have been evaluated, and the main limitations are characterized. Complete documentation, visual
+
+
+                                                26
+QDM research playbook                                           Joint calibration and reconstruction
+
+
+reporting, and the manuscript. Add a new experiment only if it resolves an objection material to
+the claim. A paper is improved by a coherent evidence chain, not the number of model acronyms.
+  Deliverable
+  At the end of month 3, write a two-page provisional paper argument: problem, prior work,
+  proposed mechanism, strongest ﬁgure, hardest failure, and missing decisive evidence. Use it
+  to choose the ﬁnal venue and remaining acquisitions.
+
+
+
+A Implementation map for the current repository
+
+A.1 What can be reused
+
+ Existing ﬁle/area                Reuse and required distinction
+ scripts/propagator.py             Physical frequency convention and analytic transfer; extend
+                                   observation modelling in a separate experiment.
+  scripts/iterative.py             Comparable ISTA/FISTA, objective/stationarity diagnostics,
+                                   epsilon stopping, honest stop reasons.
+  scripts/torch_inverse.py         FFT mechanics and adjoint checks; current transfer is ﬁxed
+                                   and single-channel, so a dynamic height operator needs a new
+                                   implementation.
+  scripts/lista.py                 Initialization-equivalent learned corrections, tied weights,
+                                   checkpoint patterns, trained-depth semantics.
+  scripts/compare_lista.py         Training/timing/provenance patterns; replace same-sample
+                                   kernel ﬁtting, truth-derived scaling, and training-only
+                                   selection in the new benchmark.
+  tests/                           Existing numerical checks; extend only where new operator
+                                   contracts, derivatives, projections, and sampling change.
+  Crop and lambda reports          Useful diagnostics and historical experiments; direct periodic
+                                   crops are not a replacement for the new ﬁnite-window
+                                   benchmark.
+Retain archived outputs. The proposed work is a new protocol and should not be compared as
+if old ﬁxed-iteration, empirical-kernel, same-sample runs used the same observation information.
+The existing COMSOL cache naming does not encode geometry identity; the expanded database
+requires a diﬀerent manifest/key scheme.
+Suggested new modules: dataset_manifest.py, observation_model.py, joint_models.py,
+train_joint.py, evaluate_joint.py, and report_joint.py. These names describe a possible
+future organization; this document has not created or validated that training pipeline.
+
+
+A.2 A diﬀerentiable propagation fragment
+
+This example handles a symmetric padded ﬁeld operator only. Projection, pixel integration, un-
+equal latent/observation support, masks, and whitening must be composed separately with their
+correct adjoints. It demonstrates that the transfer is computed from a tensor height without
+converting it to NumPy or detaching it.
+import torch
+import torch.nn.functional as F
+
+def propagate(x, h, dx_um, z_ref_um=0.5, pad=32):
+
+
+                                                27
+QDM research playbook                                              Joint calibration and reconstruction
+
+
+    # x: [batch, channels, H, W], signed fields
+    # h: [batch], in um, kept in the autograd graph
+    # dx_um: common physical pitch for this batch
+    H0, W0 = x.shape[-2:]
+    xp = F.pad(x, (pad, pad, pad, pad)) if pad else x
+    ny, nx = xp.shape[-2:]
+    fy = torch.fft.fftfreq(ny, d=dx_um,
+                           device=x.device, dtype=x.dtype)
+    fx = torch.fft.fftfreq(nx, d=dx_um,
+                           device=x.device, dtype=x.dtype)
+    freq = torch.sqrt(fy[:, None]**2 + fx[None, :]**2)
+    gap = (h - z_ref_um).reshape(-1, 1, 1, 1)
+    transfer = torch.exp(-2 * torch.pi * gap * freq)
+    out = torch.fft.ifft2(torch.fft.fft2(xp) * transfer).real
+    return out[..., pad:pad + H0, pad:pad + W0]
+
+# Validate positive gaps and pitch in the caller.
+# Cache frequency grids by shape/pitch/device/dtype, not H(h).
+# Different dx and dy require separate frequency spacings.
+
+
+For the same real radial transfer and symmetric support, the adjoint has the same pad/con-
+volve/crop form. That statement does not extend automatically to arbitrary C, S, or Q; their
+adjoints must insert residuals, transpose averaging, and transpose projection in reverse order.
+Check the implemented operator rather than assuming a transpose from its diagram.
+
+
+A.3 A split-aware training skeleton
+
+for batch in train_loader:
+    y, truth, h_true, metadata = batch
+    # metadata contains only information allowed at inference
+    x_hat, h_hat = model(y, metadata)
+    y_hat = observation_model(x_hat, h_hat, metadata)
+    loss = field_loss(x_hat, truth)
+    loss += weight_h * height_loss(h_hat, h_true)
+    loss += weight_obs * observation_loss(y_hat, y, metadata)
+    optimizer.zero_grad()
+    loss.backward()
+    optimizer.step()
+
+# Select checkpoints using held-out validation sources.
+# Fit uncertainty calibration on a separate calibration split.
+# Evaluate the locked source/session test split after selection.
+
+
+The fragment is conceptual. It does not specify a novel architecture, justify the noise likelihood,
+or guarantee convergence. Simulation height labels are training supervision; never substitute true
+test height for a predicted estimate in the unknown-height result.
+
+
+B Practical records and templates
+
+B.1 Scene manifest example
+
+geometry_id: cad_hash_or_stable_layout_id
+scene_id: geometry_drive_mesh_id
+source_family: spiral_or_other_declared_family
+source_plane_definition: conductor_top_surface
+reference_height_um: 0.5
+observation_height_um: 3.0
+height_label_kind: exact_simulation_coordinate
+
+
+                                                 28
+QDM research playbook                                             Joint calibration and reconstruction
+
+
+height_uncertainty_um: 0.0
+dx_um: 0.1
+dy_um: 0.1
+field_quantity: B
+field_unit: T
+components: [Bx, By, Bz]
+current_A: measured_or_prescribed_value
+grid_shape: [ny, nx]
+simulation_mesh_id: mesh_hash
+split_group: geometry_id_or_template_family
+parent_scene: full_physical_scene_id
+observation_transform: sensing_then_crop_version
+acquisition_session: null_for_simulation
+
+
+This example uses existing project units and a sample height pair. It is not a claim that every
+external database entry has those values. An experimental manifest should add NV axis, stage
+increments, absolute-height calibration method, raw-data references, lock-in/ODMR settings, drive
+logs, and measurement covariance identiﬁers.
+
+
+B.2 Experiment card
+
+  ID and question: E___ / What would this experiment establish?
+  Hypothesis and falsiﬁer: What outcome would reject the explanation?
+  Inputs at inference: Height? CAD? dictionary? projection? pitch?
+  Data and split: Source groups, acquisition sessions, manifest hashes.
+  Method/control: One change; matched prior/data/compute.
+  Primary endpoint: Field, height, resolution, or reliability criterion.
+  Secondary diagnostics: Residual maps, proﬁles, spectra, timing.
+  Result and uncertainty: Source-level eﬀect size and conﬁdence interval.
+  Decision: Keep, reject, investigate physics, or acquire missing data.
+
+
+
+B.3 First 10 working days
+
+1. Days 1–2: inventory the existing COMSOL database; deﬁne source identities, height origin,
+   units, and available targets. Request the experimental archive and logs.
+2. Days 3–4: freeze a pilot split; validate analytical propagation, adjoints, and height derivatives
+   against small cases and several COMSOL pairs.
+3. Days 5–6: produce known-height classical reconstructions and the wrong-height sweep. Examine
+   boundary and spectral errors.
+4. Days 7–8: form source–height lookalike pairs; vary source size/current independently. Write
+   the ambiguity diagnosis.
+5. Days 9–10: train a small known-height learned baseline or height predictor, depending on the
+   diagnosis; draft the one-page next-experiment argument.
+
+The timetable assumes the COMSOL ﬁles can be read and paired. If the audit reveals inconsistent
+coordinates or missing targets, those corrections become the ﬁrst milestone. Do not start a month-
+long training campaign before the input contract is trusted.
+
+
+
+
+                                                   29
+QDM research playbook                                            Joint calibration and reconstruction
+
+
+B.4 Failure triage
+
+ Symptom                     First investigation
+ Height runs to a bound      Non-identiﬁability, amplitude scaling, prior bias, sign of height
+                             derivative
+ Residual improves; truth    Regularization, unstable frequencies, wrong model, invalid height
+ worsens                     information
+ Crop seams or edge rings    Periodic assumption, source outside FOV, padding/support
+                             mismatch
+ Wrong amplitudes/signs      Units, normalization, NV projection, current sign, ﬁnal activation
+ Good simulations; poor      Registration, covariance, optical/NV averaging, raw readout
+ real maps                   artifacts
+ Uncertainty always tiny     Calibration leakage, narrow training family, unjustiﬁed likelihood,
+                             branch collapse
+ Uncertainty always          Poor scores, insuﬃcient information, candidate spacing, untrained
+ broad                       prior
+ Joint model loses to        Weak control tuning, noisy height updates, redundant mechanism,
+ two-stage                   excessive complexity
+
+
+B.5 A ﬁnal claim audit
+
+Before submission, ask whether the novelty is an algorithm, an uncertainty method, an observation
+model, or an experimental capability. State what was given at inference and what was estimated.
+Describe which ﬁne features were validated independently, which depend on priors, and whether the
+height reference is absolute or relative. Make “unseen geometry” mean excluded physical identities,
+not new crops of the same coil. Make “super-resolution” mean a deﬁned physical detail-recovery
+result, not a larger tensor.
+
+
+C Focused reading and questions for collaborators
+
+C.1 Read with an implementation target
+
+1. LISTA and ALISTA: derive the layer from a proximal iteration and reproduce initialization
+   equivalence [1, 2].
+2. U-Net and FiLM: build a multiscale signed-ﬁeld baseline, then test a single metadata-
+   conditioning change [3, 4].
+3. MoDL/VarNet: implement exact data consistency for this observation model instead of copy-
+   ing the MRI encoding [5, 6].
+4. QDM current reconstruction: identify the actual observation components, priors, and stand-
+   oﬀ/noise comparisons [15, 16, 14].
+5. Bathla dictionary work: reproduce the available-data task and distinguish coeﬃcient sparsity
+   from ﬁeld-pixel sparsity [17].
+6. Joint calibration and Bayesian source inference: map which assumptions stabilize the
+   inverse [18, 19, 11].
+
+
+
+
+                                                   30
+QDM research playbook                                          Joint calibration and reconstruction
+
+
+7. Calibration: implement coverage and selective-risk evaluation before adding a more complex
+   posterior network [12, 13].
+
+
+C.2 Questions to resolve when the hard disk arrives
+
+• Which maps are raw measurements, ﬁtted ﬁelds, averaged references, or dictionary reconstruc-
+  tions?
+• Are all original basis maps and activation/drive labels available, and are actual currents
+  recorded?
+• Are there repeated acquisitions, current-oﬀ data, raw ﬁt residuals, and timestamps?
+• Were heights independently calibrated, or estimated by a model? Which coordinate is the
+  origin?
+• Which coils and layer depths are known, and which CAD variants have corresponding COMSOL
+  models?
+• Do the archive’s measurements include a usable closer-plane reference, or should we acquire
+  one?
+• Which arrays/sessions can be withheld for adaptation, calibration, and ﬁnal testing?
+
+These questions are operational metadata requirements. They do not require changing the agreed
+primary target or delaying the simulation pilot.
+
+
+References
+
+ [1] K. Gregor and Y. LeCun. Learning Fast Approximations of Sparse Coding. ICML, 2010. https:
+     //icml.cc/Conferences/2010/papers/449.pdf.
+
+ [2] J. Liu, X. Chen, Z. Wang, and W. Yin. ALISTA: Analytic Weights Are As Good As Learned
+     Weights in LISTA. ICLR, 2019. https://openreview.net/forum?id=B1lnzn0ctQ.
+
+ [3] O. Ronneberger, P. Fischer, and T. Brox. U-Net: Convolutional Networks for Biomedical
+     Image Segmentation. 2015. https://arxiv.org/abs/1505.04597.
+
+ [4] E. Perez et al. FiLM: Visual Reasoning with a General Conditioning Layer. AAAI, 2018.
+     https://arxiv.org/abs/1709.07871.
+
+ [5] H. K. Aggarwal, M. P. Mani, and M. Jacob. MoDL: Model Based Deep Learning Architecture
+     for Inverse Problems. IEEE Transactions on Medical Imaging, 2018. https://arxiv.org/ab
+     s/1712.02862.
+
+ [6] A. Sriram et al. End-to-End Variational Networks for Accelerated MRI Reconstruction. 2020.
+     https://arxiv.org/abs/2004.06688.
+
+ [7] L. Chen et al. Simple Baselines for Image Restoration. ECCV, 2022. https://arxiv.org/ab
+     s/2204.04676.
+
+ [8] D. Ulyanov, A. Vedaldi, and V. Lempitsky. Deep Image Prior. CVPR, 2018. https://arxiv.
+     org/abs/1711.10925.
+
+ [9] S. V. Venkatakrishnan, C. A. Bouman, and B. Wohlberg. Plug-and-Play Priors for Model
+     Based Reconstruction. GlobalSIP, 2013. https://brendt.wohlberg.net/publications/ven
+     katakrishnan-2013-plugandplay.html.
+
+                                              31
+QDM research playbook                                            Joint calibration and reconstruction
+
+
+[10] Z. Li et al. Fourier Neural Operator for Parametric Partial Diﬀerential Equations. ICLR, 2021.
+     https://arxiv.org/abs/2010.08895.
+
+[11] H. Chung, J. Kim, S. Kim, and J. C. Ye. Parallel Diﬀusion Models of Operator and Image
+     for Blind Inverse Problems. CVPR, 2023. https://arxiv.org/abs/2211.10656.
+
+[12] C. Guo, G. Pleiss, Y. Sun, and K. Q. Weinberger. On Calibration of Modern Neural Networks.
+     ICML, 2017. https://arxiv.org/abs/1706.04599.
+
+[13] A. N. Angelopoulos and S. Bates. A Gentle Introduction to Conformal Prediction and
+     Distribution-Free Uncertainty Quantiﬁcation. 2021. https://arxiv.org/abs/2107.07511.
+
+[14] D. A. Broadway et al. Improved Current Density and Magnetization Reconstruction Through
+     Vector Magnetic Field Measurements. Physical Review Applied 14, 024076, 2020. https://ar
+     xiv.org/abs/2005.06788.
+
+[15] S. Midha et al. Optimized Current Density Reconstruction from Wideﬁeld Quantum Diamond
+     Magnetic Field Maps. Physical Review Applied 22, 014015, 2024. https://arxiv.org/abs/
+     2402.17781.
+
+[16] N. R. Reed et al. Machine Learning for Improved Current-Density Reconstruction from Two-
+     Dimensional Vector Magnetic Images. Physical Review Applied 23, 034035, 2025. https:
+     //arxiv.org/abs/2407.14553.
+
+[17] A. Bathla, M. Parashar, M. Markham, A. Rajwade, and K. Saha. Dictionary-Based Recon-
+     struction of Spatio-Temporal 3D Magnetic Field Images from Quantum Diamond Microscope.
+     Preprint, 2025; published in Optica 13, 686–697, 2026. The archive protocol here refers to the
+     linked preprint description. https://arxiv.org/html/2506.05491v1.
+
+[18] A. Setescak et al. A Fourier-Space Approach to Physics-Informed Magnetization Reconstruc-
+     tion from Nitrogen-Vacancy Measurements. arXiv:2602.17180v3, 2026. https://arxiv.org/
+     abs/2602.17180.
+
+[19] C. B. Clement, J. P. Sethna, and K. C. Nowack. Reconstruction of Current Densities from
+     Magnetic Images by Bayesian Inference. 2021 version. https://arxiv.org/abs/1910.12929.
+
+[20] S. Pandey et al. QDsiM: A Noise-Aware Simulation Toolkit for Quantum Diamond Microscope.
+     Preprint, 2026. https://arxiv.org/abs/2601.11649.
+
+[21] CVPR 2027 oﬃcial call for papers. Checked 8 October 2026. https://cvpr.thecvf.com/Co
+     nferences/2027/CallForPapers.
+
+[22] ICCV 2027 oﬃcial dates page. Checked 8 October 2026. https://iccv.thecvf.com/Confer
+     ences/2027/Dates.
+
+[23] ICCP 2027 oﬃcial website. Checked 8 October 2026. https://iccp2027.iccp-conference.
+     org/.
+
+[24] IEEE Signal Processing Society ICIP listing. Checked 8 October 2026. https://signalproc
+     essingsociety.org/event-names/icip.
+
+[25] ICASSP 2027 oﬃcial important dates. Checked 8 October 2026. https://2027.ieeeicassp.
+     org/important-dates/.
+
+[26] EUSIPCO 2027 oﬃcial website. Checked 8 October 2026. https://eusipco2027.de/.
+
+[27] Optica Quantum 2.0 oﬃcial call. Checked 8 October 2026. https://www.optica.org/event
+     s/topical_meetings/quantum/.
+
+
+                                                32
+

@@ -1,0 +1,121 @@
+\section{Experimental validation with the real microscope}
+\label{sec:real}
+\subsection{Plan the first campaign around one falsifiable claim}
+The first campaign should ask whether an unknown-height reconstruction improves a registered closer-plane prediction for sources excluded from fitting/adaptation. Start with a few independently identifiable coil layouts, several sensor positions, repeated acquisitions, and at least two acquisition sessions if practical. Scale the number after a pilot establishes repeatability and uncertainty; a suggested count is an engineering starting point, not a statistical power calculation.
+
+For the archived multilayer array, use individual-coil activations to begin with a single active source and the corresponding background subtraction. Check whether routing, contacts, or wire bonds introduce sources between reference and sensor planes; simple source-free upward continuation is valid only above all relevant sources. A known layer depth can parameterize $h_\ell=d_0+z_\ell$, but the common offset $d_0$ still needs calibration or explicit inference.
+
+\subsection{A measurement protocol}
+\begin{enumerate}
+\item Select a known layout and measure actual drive current, including sign and possible heating dependence. Record the source reference surface and relevant layer thicknesses.
+\item Record a reference/background acquisition with the same optics, microwave settings, and sensor configuration.
+\item Acquire the closest usable plane, followed by several larger relative gaps. Record stage displacement, approach direction, mechanical repeatability, and drift.
+\item At each position acquire repetitions or retain raw traces sufficient to estimate fitting noise and covariance. Keep timestamps and acquisition order.
+\item Repeat a subset at another session and on withheld layouts. Fit registration/calibration using designated calibration acquisitions, not every test target.
+\item Construct registered observation--reference pairs only after checking coordinate transforms, magnification, projection axes, field units, and averaging.
+\end{enumerate}
+
+\subsection{What counts as height ground truth}
+A calibrated stage increment establishes a relative displacement. It does not independently determine NV implantation depth, physical contact gap, surface spacer thickness, or sample tilt. Report absolute height only where the complete reference is independently characterized, with error bars. Otherwise evaluate relative-gap estimation and near-plane prediction, and describe fitted absolute distance as model-dependent.
+
+The magnetization study~\cite{setescak} is a useful conceptual reference for joint calibration with a physical prior, but its material model is not a coil prior. Its source-dependent calibration illustrates why nominal, model-fitted, and independently measured distances belong in separate columns of the experimental report.
+
+\subsection{Near-plane reference versus optical-free field}
+If the closest measured image retains the optical PSF and NV-depth averaging, then it is a target for \emph{standoff improvement under the same instrument}, not automatically the true unblurred field at $0.5\um$. Matching optics across height pairs helps isolate magnetic propagation, but changes in focus, magnification, and averaging must be logged. COMSOL near-plane truth is a separate evidence tier.
+
+For the first paper, report both simulated field-truth accuracy and experimental closer-plane measurement accuracy. Do not present the latter as complete optical deconvolution. If the physical $z_{\rm ref}$ cannot be measured directly, state that restriction and validate the accessible target plane.
+
+\subsection{Domain adaptation without target leakage}
+Use an adaptation split of real coils/sessions. Fit low-dimensional nuisance calibration first: registration, axis, gain, and relevant averaging. Then evaluate whether adapting the learned prior adds value beyond that calibration. Record all test-time optimization steps and include them in timing.
+
+Repeated noisy acquisitions can train a denoising consistency term if the source is unchanged and noise assumptions are supported. Unsupervised repropagation constrains the measurement but leaves the joint height--source ambiguity; combine it with validated priors or calibration information. A model trained against its own reconstruction cannot establish independent sharp-field accuracy.
+
+\subsection{Multilayer extension and useful acquisition design}
+When source drive is controllable, temporal coding can produce genuinely useful independent source information. Known, distinguishable excitation waveforms let you demodulate components before reconstructing each contribution. Design codes to improve conditioning under measured noise and acquisition budget, rather than merely collecting more redundant height planes. Test cross-talk and synchronization error. This can be a later co-design contribution, but dynamic source fitting itself already exists in the group dataset.
+
+\begin{figure}[htbp]\centering
+\begin{tikzpicture}[node distance=6mm]
+\node[block] (src) {Known drive/layout\\and source identity};
+\node[block,right=of src] (cal) {Calibration and\\background};
+\node[block,right=of cal] (sweep) {Height sweep\\and repetitions};
+\node[block,below=of sweep] (reg) {Registration and\\noise audit};
+\node[block,left=of reg] (test) {Locked source/session\\test protocol};
+\node[block,left=of test] (claim) {Field, distance, and\\reliability evidence};
+\draw[arrow] (src)--(cal);\draw[arrow] (cal)--(sweep);\draw[arrow] (sweep)--(reg);
+\draw[arrow] (reg)--(test);\draw[arrow] (test)--(claim);
+\end{tikzpicture}
+\caption{New acquisitions complement the archive. Every arrow represents a recorded processing step, so measurement improvements and network improvements can be separated.}
+\end{figure}
+
+\section{A manageable 4--6 month work plan}
+\label{sec:schedule}
+\begin{longtable}{P{23mm}P{65mm}P{63mm}}
+\toprule Period & Main work & Exit evidence\\\midrule\endhead
+Weeks 1--2 & COMSOL audit; source splits; E00--E03; request archive metadata & Trusted physics, wrong-height curves, ambiguity examples\\
+Weeks 3--4 & E01/A0--A2; prior comparison; pilot learning curves & Strong known-height controls and quantitative failure diagnosis\\
+Weeks 5--6 & A3 and A4; E04--E05; matched compute controls & Demonstrated benefit or rejection of joint refinement\\
+Weeks 7--9 & One candidate mechanism (A5 or A6); independent literature check & A falsifiable contribution with matched ablation\\
+Weeks 10--12 & E07--E09; real-data calibration/adaptation; acquisition pilot & Transfer study and stable experimental protocol\\
+Weeks 13--16 & Locked evaluation; resolution and uncertainty; new height pairs & Independent evidence, failure cases, reproducibility\\
+Weeks 17--20 & Paper draft; targeted reviewer-style objections; additional controls & Complete manuscript and documented limitations\\
+Weeks 21--24 & Buffer for acquisition, revisions, release, and submission & A venue-ready claim matched to actual results\\\bottomrule
+\end{longtable}
+Dates are a planning range, not a promise. Conduct the real-data audit and acquisition scheduling early because external storage, calibration, and instrument time can be the critical path. Every week should yield a figure, table, operator check, or written decision rather than only more code.
+
+\subsection{Weekly operating rhythm}
+\begin{enumerate}
+\item Write one question and a predicted outcome on Monday.
+\item Run the smallest controlled experiment capable of disproving it.
+\item Inspect source-level distributions, residuals, and difficult examples.
+\item On Friday write a one-page conclusion with the next decision.
+\item Discuss that page with collaborators; update the experiment ledger.
+\end{enumerate}
+Limit active modelling changes to one at a time. When a result fails, decide whether the cause is measurement physics, optimization, source prior, or unavailable information before changing capacity. The strongest result may be a reliable failure detector or a well-supported resolution limit rather than a larger neural network.
+
+\section{From a prototype to a publishable contribution}
+\label{sec:publication}
+\subsection{Write the evidence chain before the paper title}
+\begin{tabularx}{\linewidth}{P{35mm}YY}
+\toprule Proposed claim & Evidence required & Main counterexample to test\\\midrule
+Joint inference helps & A3 versus A4 with matched data/prior/compute & A larger or error-robust two-stage baseline wins\\
+Handles ambiguity & Calibrated height sets; selective error & High confidence on lookalike unseen sources\\
+Generalizes physically & Source/family/FOV/pitch holdouts & Hidden layout or amplitude shortcuts\\
+Improves real QDM & Independent sessions/height pairs & Gains explained solely by registration\\
+Recovers finer detail & Defined feature task with false positives & Plausible unsupported structure\\\bottomrule
+\end{tabularx}
+
+\subsection{Novelty audit}
+For each proposed mechanism search both QDM/NV work and the broader inverse-imaging literature. Joint source--height fitting, unrolling, conditioning, Bayesian priors, and diffusion already have precedent. Write a comparison table of estimated variables, observation assumptions, prior, uncertainty, calibration, and evaluation regimes. The most important question is ``what can our method do reliably that these methods cannot under comparable information?''
+
+Potential contributions are magnetic refinement informed by uncertainty, joint source and height inference with calibrated rejection, or an explicit treatment of unknown sources outside the FOV. These are research hypotheses. Validate novelty before writing ``first'' or ``unexplored.'' A physically rigorous benchmark can be valuable, but a narrow same-sample training score is insufficient evidence for the proposed generalization claim.
+
+\subsection{The minimum convincing paper package}
+\begin{enumerate}
+\item One clearly defined problem and primary output, with observational information specified.
+\item One central new mechanism or analysis, motivated by a reproducible baseline failure.
+\item A simulation benchmark split by source identity/family and a real validation protocol.
+\item Strong classical, direct-learned, two-stage, and joint controls under comparable information.
+\item Ablations, calibration sensitivity, geometry/noise challenge sets, source-level statistics, and honest failure cases.
+\item Available code/configurations/splits, or a documented substitute release if raw experimental data cannot be shared.
+\end{enumerate}
+
+Suggested paper figures: (1) ambiguity and task; (2) observation model and architecture; (3) wrong-height sensitivity; (4) baseline and joint comparisons; (5) unseen geometry/FOV/pitch; (6) uncertainty and selective risk; (7) experimental closer-plane predictions and profiles. Use only the figures supporting the actual central claim. Each caption should specify data provenance, split, physical units, and what information the method received.
+
+\subsection{Venue strategy and dated deadline snapshot}
+The following are planning judgments, not acceptance requirements or guarantees. Deadlines were checked against the linked official pages on 8 October 2026 and must be rechecked before submission.
+\begin{longtable}{P{27mm}P{54mm}P{70mm}}
+\toprule Venue & Deadline/status & Best emphasis for this project\\\midrule\endhead
+CVPR 2027 & Registration 10 Nov 2026; paper 16 Nov 2026, AoE~\cite{cvpr} & Broadly useful blind-inference mechanism with strong physical and experimental evidence; this imminent cycle is a stretch for a new 4--6 month study.\\
+ICCV 2027 & Paper deadline not confirmed on official page~\cite{iccv} & Mature method, ambiguity analysis, comprehensive transfer and real-data validation.\\
+ICCP 2027 & Paper deadline not confirmed on official website~\cite{iccp} & Physics, observation modelling, self-calibration, and a new computational imaging capability.\\
+ICIP 2027 & 31 Mar 2027 in IEEE SPS listing; cutoff time unconfirmed~\cite{icip} & Focused reconstruction mechanism with strong image/field evaluation and efficiency.\\
+ICASSP 2027 & Regular deadline 23 Sep 2026 has passed~\cite{icassp} & A future cycle: inference/optimization method, robustness, and justified mathematical analysis.\\
+EUSIPCO 2027 & 6 Feb 2027~\cite{eusipco} & Compact technical contribution; calibration or dictionary-mismatch inference.\\
+Quantum 2.0 2027 & 9 Feb 2027~\cite{quantum} & Experimental quantum-sensing improvement with quantified physical benefit.\\\bottomrule
+\end{longtable}
+CVPR's review period overlaps the EUSIPCO deadline; do not plan simultaneous submission of substantially the same paper where prohibited. Workshop paper calls are distinct from workshop-proposal deadlines. An experimental sensing talk and an archival algorithm paper also have different publication requirements; check the actual call and prior-publication policy before planning both.
+
+\subsection{When to stop adding experiments}
+Stop architectural expansion when the central claim has reproducible support, strong alternatives have been evaluated, and the main limitations are characterized. Complete documentation, visual reporting, and the manuscript. Add a new experiment only if it resolves an objection material to the claim. A paper is improved by a coherent evidence chain, not the number of model acronyms.
+
+\deliver{At the end of month 3, write a two-page provisional paper argument: problem, prior work, proposed mechanism, strongest figure, hardest failure, and missing decisive evidence. Use it to choose the final venue and remaining acquisitions.}

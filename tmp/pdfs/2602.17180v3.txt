@@ -1,0 +1,1548 @@
+                                                      A Fourier-Space Approach to Physics-Informed Magnetization Reconstruction from
+                                                                             Nitrogen-Vacancy Measurements
+
+                                                             Alexander Setescak,1, 2, ∗ Florian Bruckner,1 Dieter Suess,1 Young-Gwan Choi,3, 4 Hayden Binger,3
+                                                              Lotte Boer,3 Chenhui Zhang,5 Hyunsoo Yang,5 Claire Donnelly,3 Uri Vool,3 and Claas Abert1
+                                                                                  1
+                                                                                   Faculty of Physics, University of Vienna, 1090 Vienna, Austria
+                                                                          2
+                                                                           University of Vienna, Vienna Doctoral School in Physics, 1090 Vienna, Austria
+                                                                        3
+                                                                          Max Planck Institute for the Chemical Physics of Solids, 01187 Dresden, Germany
+                                                                           4
+                                                                             Department of Physics, University of Ulsan, Ulsan 44610, Republic of Korea
+                                                                                        5
+                                                                                          Department of Electrical and Computer Engineering,
+                                                                                   National University of Singapore, Singapore 117583, Singapore
+                                                                                                        (Dated: July 30, 2026)
+                                                                     Reconstructing magnetization textures from nitrogen-vacancy (NV) magnetometry stray-field
+                                                                  measurements is a challenging, fundamentally ill-posed inverse problem, further complicated by the
+                                                                  unknown effective distance between sensor and magnetic material. Here we show that incorporating
+                                                                  a micromagnetic energy functional directly into the inversion filters out unphysical, high-energy con-
+                                                                  figurations, while Fourier-space upward continuation of the stray field allows us to simultaneously fit
+                                                                  the distance. Applied to measurements of the van der Waals ferromagnet Fe3−x GaTe2 , it recovers
+                                                                  an effective distance estimate of approximately 81 nm and low-energy configurations that reproduce
+arXiv:2602.17180v3 [cond-mat.mes-hall] 29 Jul 2026
+
+
+
+
+                                                                  the observed field. More broadly, embedding physics directly into the reconstruction turns ill-posed
+                                                                  magnetic inverse problems into transparent, interpretable reconstructions, with applicability well
+                                                                  beyond NV magnetometry.
+
+
+                                                                        INTRODUCTION                                   ing has further advanced the field. Physically-informed
+                                                                                                                       neural networks have proven effective in reconstructing
+                                                                                                                       magnetization configurations [9, 10]. The network’s ar-
+                                                        Many recent developments in stray-field measurement            chitecture naturally enforces smoothness, while the field
+                                                     techniques have enabled the exploration of nanoscale              based forward loss enables the recovery of the magnetiza-
+                                                     magnetic textures. Among these, nitrogen-vacancy (NV)             tion. However, when applied to fully three-dimensional
+                                                     magnetometry (Fig. 1a) has emerged as a powerful tool:            spin textures, successful reconstruction remains challeng-
+                                                     It uses nitrogen-vacancy centers in diamond as atomic-            ing and requires an initial magnetization guess [9]. Re-
+                                                     scale quantum sensors. The fluorescence (light emission)          cently, we introduced a hybrid strategy [11] that utilizes
+                                                     from these sensors changes based on their spin state, al-         a U-Net to generate an initial guess, followed by micro-
+                                                     lowing for the highly sensitive and quantitative measure-         magnetic relaxation. While this approach is very effec-
+                                                     ment of magnetic fields [1, 2]. However, inferring the            tive at recovering intrinsic material parameters, it relies
+                                                     underlying magnetization from measured stray fields con-          on a multistep process that fundamentally separates the
+                                                     stitutes an ill-posed inverse problem [1, 3, 4]: infinitely       data-driven estimation from the final physics-based re-
+                                                     many magnetization configurations can produce the same            finement. Here, we propose a powerful alternative to ex-
+                                                     stray field (Fig. 1b). This ambiguity is a hallmark of mag-       isting reconstruction strategies: a self-consistent physics-
+                                                     netic inverse problems, also posing significant challenges        informed reconstruction framework that embeds micro-
+                                                     in the reconstruction of current densities from magnetic          magnetic physics directly into the optimization (Fig. 1c).
+                                                     field maps [5]. Approaches to solving this inverse problem        Compared to other variational methods that rely on
+                                                     have evolved across different methodologies. Early work           mathematical regularization as a proxy for physics, e.g.
+                                                     by Hug et al. [6] established quantitative Magnetic Force         using Tikhonov regularization as a qualitative exchange
+                                                     Microscopy (qMFM) by determining an instrument cali-              interaction, we replace these heuristic regularizers with
+                                                     bration function to analytically deconvolve the stray field       quantitative micromagnetic energy terms. This leaves
+                                                     data. This approach effectively reconstructs the mag-             us with a single regularization weight that balances the
+                                                     netic surface charge equivalent, providing a quantitative         magnetic stray field residual against the system’s to-
+                                                     map of the field sources at the sample surface [7]. In con-       tal energy, and can be guided by the so-called L-Curve
+                                                     trast, Bruckner et al. [4] formulated the reconstruction as       method [12, 13]. This yields a transparent, end-to-end
+                                                     a variational optimization task. Their approach utilizes          optimization process that requires no training data and
+                                                     the adjoint method and Tikhonov regularization to re-             provides quantitative, model-constrained reconstruction
+                                                     construct the 3D magnetization by minimizing the field            of nanoscale magnetic textures along with critical exper-
+                                                     residual via gradient-based optimization. Yao et al. [8]          imental parameters, in particular the effective distance
+                                                     additionally incorporate topological charge constraints           dNV . Throughout this work, dNV denotes the total sepa-
+                                                     to successfully reconstruct different magnetic quasipar-          ration between the magnetic material and the NV sensing
+                                                     ticles. Simultaneously, the integration of deep learn-
+                                                                                                                                         2
+
+center, including the NV implantation depth, any surface                       domain. The multiplicative factors correspond to de-
+layers such as sample oxidation, the physical gap between                      averaging over the cell thickness of the vacuum layer ∆z
+sample and diamond surface, and any other separation                           and upward continuation towards the effective distance
+between the two [14].                                                          dNV , respectively.
+                                                                                  Following upward continuation, the vector field
+                                                                               H̃dem (dNV ) is transformed back to real space via inverse
+                    FORWARD MODEL                                              FFT and projected onto the nitrogen-vacancy (NV) cen-
+                                                                               ter quantization axis nNV = (sin 54.74◦ , 0, cos 54.74◦ ),
+   Given the magnetization of the sample, our forward                          the tetrahedral angle set by the diamond ⟨111⟩ lattice
+model essentially simulates what an NV magnetometer                            direction. This projection, H dem = Hdem · nNV , yields a
+would detect at a given effective distance. It provides                        final scalar field map that can be directly compared to
+us with a differentiable map from a given magnetization                        experimental field measurements.
+configuration m and the effective distance dNV to the ex-                         Notably, our approach decouples the simulation’s ver-
+pected signal. The required micromagnetic calculations                         tical discretization (∆z ) from the measurement geometry.
+are performed using the open-source, finite-difference                         This allows for the modeling of thick magnetic samples
+Python library NeuralMag [15], configured with its cell-                       using coarse discretization while accurately calculating
+averaged discretization and running on JAX (also verified                      the stray field at arbitrary effective distances. Further-
+in the PyTorch-based magnum.np [16]). Both backends                            more, because the entire forward pipeline is implemented
+evaluate the stray field through FFT convolution with                          in a fully differentiable manner, it enables gradient-based
+the demagnetization tensor kernel, resulting in a favor-                       optimization not only for the magnetization field m but
+able computational complexity of O(N log N ).                                  also for auxiliary parameters such as the effective dis-
+   All simulations presented in this study focus on an                         tance dNV . See SM Sec. I for the de-averaging and
+800 nm × 800 nm area of a Fe3−x GaTe2 flake of thick-                          upward-continuation derivation, and SM Sec. II.C for the
+ness 100 nm. The system is discretized with a cell size                        simulation geometry [17].
+of ∆x = ∆y = 1 nm and ∆z = 100 nm. The geometry
+consists of two layers: the bottom layer represents the
+magnetic material, while the top layer is set to vacuum                           PHYSICS-INFORMED LOSS FUNCTIONAL
+to calculate stray fields above the sample surface. The
+measurement itself does not constrain depth variations,                          To address the inverse problem of inferring a magneti-
+and for the chosen parameters the physics-informed regu-                       zation m from the measured field H meas , we formulate an
+larizer favors a z-uniform state. Finer ∆z would therefore                     optimization problem by minimizing the loss functional
+not recover meaningful new information, and we adopt                           J(m, dNV ):
+the single-layer geometry by construction.
+   The solver computes the stray field averaged over the
+simulation cell volume (1 nm×1 nm×100 nm). While lat-                                J(m, dNV ) = L2data (m, dNV ) + λ Lenergy (m).    (2)
+eral spatial averaging is negligible, the vertical averaging
+over the vacuum layer thickness ∆z introduces signifi-                            Here Ldata = ∥H dem (m, dNV )−H meas ∥/∥H meas ∥ is the
+cant deviations that require explicit correction to enable                     relative field error between the modeled and measured
+comparison with measurements performed at a specific                           stray field, and Lenergy is the total micromagnetic energy
+effective distance dNV . Fortunately, in the non-magnetic                      Etotal (m) normalized to a uniformly out-of-plane magne-
+region z > z0 above the sample surface z0 , the magnetic                       tized state m = ez .
+field satisfies Laplace’s equation, permitting the deriva-                        Following the micromagnetic framework of Abert et
+tion of an exact transfer function in 2D Fourier space.                        al. [18], we define the total energy as the sum of five
+Starting with the averaged field ⟨Hdem ⟩[z0 ,z0 +∆z ] in the                   contributions: the exchange energy (E ex ), the demag-
+vacuum layer above the sample, this function recovers the                      netization energy (E dem ), the uniaxial anisotropy energy
+magnetic field at the sample surface and extrapolates it                       (E aniu ), the interfacial Dzyaloshinskii–Moriya interaction
+to the effective distance dNV :                                                (DMI) energy (E dmii ), and the Zeeman energy (E Zee )
+                                                                               from the applied bias field Hbias . For the anisotropy and
+                                                                             DMI formulations, the relevant axis and interface nor-
+                                                k∆z                            mal directions coincide with the out-of-plane direction ez .
+H̃dem (dNV ) = ⟨H̃dem ⟩[z0 ,z0 +∆z ] ·                       e−k(dNV −z0 ) ,
+                                             1 − e−k∆z                         The material parameters used throughout this work are
+                                                                      (1)      the interfacial DMI constant Di ≈ −0.51 mJ m−2 , satura-
+                                                                               tion magnetization Ms ≈ 53 kA m−1 , uniaxial anisotropy
+               q                                                               constant Ku ≈ 0.302 MJ m−3 , and exchange stiffness A ≈
+  where k =     kx2 + ky2 is the magnitude of the wavevec-
+                                                                               0.70 pJ m−1 [19]. The experimental bias field is H bias ≈
+tor and H̃dem denotes the stray field in the 2D Fourier                        3.2 kA m−1 . The formulation is not tied to this partic-
+                                                                                                                                                                           3
+
+
+              (a) NV Magnetometry                                               (c) Physics-Informed Reconstruction
+
+                                                                                    Forward Model                            Optimization Variables
+                                           NV center                         Computation of simulated field map                m (Magnetization),
+                                                                                       H dem (m, dNV )                           dNV (Distance)
+     dNV
+                                                 Measured
+
+
+
+
+                                                                                                                                                             ITERATIVE REFINEMENT
+                                                 field H meas
+
+                                                                                    Data Fidelity                             Physical Consistency
+                                                                            Mismatch between simulated field               Micromagnetic energy Etotal (m)
+                                                                             and experimental observations
+Stray field
+                                                                                H dem (m, dNV ) ̸= H meas                  Exchange Demag Anisotropy DMI
+
+                                                                                                    Joint Objective J(m, dNV )
+ Magnetic sample
+
+
+
+              (b) Ill-posed Problem                                                                      Optimization Engine
+                                                                                               Update m and dNV to minimize J
+
+                                                                1.0
+
+                                                                0.5          Reconstructed m∗               Refined d∗NV               H dem (m∗ , d∗NV )
+                                                                       mz
+
+
+                                                                0.0
+                                                                                                                      NV center
+                                                                -0.5
+                                                                                                             81nm
+                                                                -1.0
+                                                                 1                                                Sample
+
+              Distinct magnetizations that reproduce
+               the measurement data equally well.
+
+
+   FIG. 1: Physics-informed reconstruction of magnetization textures from NV magnetometry. The
+schematic illustrates the workflow for overcoming the ill-posed nature of stray-field imaging. (a) NV magnetometry
+measures the stray field projection H meas at an unknown effective distance dNV . (b) Multiple distinct magnetization
+        configurations can produce a nearly identical stray field, making direct inversion unreliable. (c) Our
+ physics-informed framework solves this by coupling a differentiable forward model with a joint objective function.
+This objective balances data-fidelity with micromagnetic energy. Through iterative gradient-based optimization, the
+framework simultaneously reconstructs the magnetization m and refines the effective distance dNV . This yields the
+     final parameters m∗ and d∗NV as an energetically favorable configuration that remains consistent with the
+                                              experimental observations.
+
+
+ular Hamiltonian or geometry: any micromagnetic en-                                                       RECONSTRUCTION
+ergy terms and sample topology supported by our differ-
+entiable inverse-micromagnetic libraries NeuralMag [15]
+and magnum.np [16] can be substituted.                                             We apply the framework to room-temperature experi-
+                                                                                mental NV magnetometry measurements of Fe3−x GaTe2
+   The regularization parameter λ > 0 controls the trade-                       flakes [19] (Fig. 2). Because optically detected magnetic
+off between data fidelity and physical stability. We visu-                      resonance (ODMR) NV magnetometry probes the Zee-
+alize this trade-off with the L-Curve method [12], plotting                     man splitting of the NV spin states, it is sensitive only
+Ldata against Lenergy for varying λ and select a balanced                       to the field magnitude along the NV axis and cannot re-
+operating point λbal at the ”corner” of the resulting L-                        solve its sign [20]. A bias field H bias is applied to lift
+Curve.                                                                          this degeneracy, with the experiment reporting the bias-
+                                                                                subtracted field H meas = |H bias + H dem | − H bias (where
+  The loss J(m, dNV ) is minimized by gradient-based op-                        H dem = Hdem · nNV ). In theory, H meas = H dem ev-
+timization, jointly over m and dNV , exploiting the differ-                     erywhere outside localized regions where the opposing
+entiability of the forward model. The micromagnetic nor-                        demagnetizing field exceeds the bias (H dem < −H bias ).
+malization constraint |m| = 1 is enforced via a unit-norm                       There, the total projected field undergoes a sign in-
+parametrization of the magnetization rather than an ad-                         version, creating ODMR sign-ambiguity artefacts (green
+ditional penalty term. Full expressions for Ldata , Lenergy ,                   contour in Fig. 2), which we exclude from the data-
+and the five energy contributions, together with the pa-                        fidelity term Ldata (see SM Sec. III). Masking suppresses
+rameter derivation and the optimizer, parametrization,                          the spurious texture induced by these artefacts, even
+and initialization choices, are given in SM Sec. II.                            though for this measurement the effect is small.
+                                                                                                                            4
+
+                                                                  ergy while still reproducing the measured field map fairly
+                                                                  well (relative field error Ldata ≈ 14.5 %, see Fig. 4).
+                                                      5
+                                                                     A key result is the convergence of the effective distance
+                                                                  to d∗NV ≈ 81 nm, with a plateau-like region in λ around
+
+
+
+
+                                                           kA/m
+                                                      0           λbal similar to, but less pronounced than, the plateau ob-
+                                                                  served in reconstructions from synthetic data. Since the
+                                                      −5          contributions to dNV are individually unknown in typical
+  1250 nm                   200 nm                                experiments, the ability to estimate this composite quan-
+                                                                  tity directly from the measurement data is a significant
+                                                                  practical advantage.
+      FIG. 2: Experimental NV magnetometry                           For the present setup, we estimate these contributions
+ measurements of a 100 nm thick Fe3−x GaTe2 thin                  from the fabrication and setup parameters. The 6 keV
+  film. Left: large-scale overview (5000 nm × 5000 nm,            nitrogen implantation places the NV center 10 to 20 nm
+      200 × 200 pixels). Right: high-resolution scan              below the diamond surface, the oxidation layer of the
+     (800 nm × 800 nm, 100 × 100 pixels) used for the             uncapped, air-sensitive Fe3−x GaTe2 surface adds 10 to
+quantitative magnetization reconstruction in this work.           30 nm, the mechanical contact gap adds a few nanome-
+The green contour encloses the sign-ambiguity artefact            tres, and because the NV can lie anywhere across the
+  regions, where the opposing projected demagnetizing             200 to 400 nm wide tip, a tip–sample tilt can lift it by a
+field H dem exceeds the bias H bias , identified in practice      further 0 to 40 nm. These contributions sum to a range
+   by a data-driven threshold-and-fill criterion. These           that contains the extracted d∗NV ≈ 81 nm, consistent with
+ regions are excluded from the data-fidelity term Ldata .         the 26 to 128 nm effective distances reported for compa-
+        The exact effective distances are unknown.                rable scanning-NV probes [14]. The full budget is given
+                                                                  in SM Sec. VI [17].
+
+   The reconstruction jointly optimizes m and dNV using
+the measured field map H meas as input. We repeat this                      LIMITATIONS AND OUTLOOK
+reconstruction independently for a range of regulariza-
+tion strengths λ. Figure 3 shows (a) the L-Curve and (b)             The first class of limitations is set by the infor-
+the corresponding converged effective distances d∗NV . We         mation content of stray-field measurements themselves
+select a balanced operating point λbal ≈ 25. We observe           rather than by the reconstruction. Certain magnetization
+that d∗NV rises with λ from ≈ 73 nm at λlow = 0.1, then           configurations are inherently invisible to any H-based
+plateaus at ≈ 81 nm over an order of magnitude in λ               method. A classic example is a perfectly flux-closed
+around λbal , before climbing to ≈ 95 nm at λhigh = 103 .         in-plane magnetic vortex, which generates zero external
+   At λ = 0 there is no prior and the inverse problem             stray field. Additionally, upward continuation acts as a
+is under-determined: upward continuation damps high-              low-pass filter on the stray field [21], exponentially sup-
+k stray fields as e−kdNV , so at the large effective dis-         pressing high-frequency components as e−kdNV , so any
+tance dNV the measurement is blind to sub-resolution              magnetization texture concentrated at high wavevectors
+structure and the reconstruction collapses into high-             k is encoded only weakly in the measurement. In our
+frequency noise that fits the data perfectly. A weak              Fe3−x GaTe2 thin film, the strong uniaxial out-of-plane
+prior at λlow = 0.1 suppresses this noise, yet the op-            anisotropy Ku confines the in-plane magnetization com-
+timizer still overfits experimental imperfections such as         ponents to narrow domain walls, making their stray-field
+sample inhomogeneities and local variations in satura-            signatures hard to detect at large distances. The recon-
+tion magnetization. It can use fine domain patterns to            structed wall type and chirality are then determined by
+fit the measurement very well at little energy cost, due to       the micromagnetic prior rather than by the data. Where
+the short intrinsic length scale set by the strong out-of-        the measurement is uninformative, the choice of physics
+plane anisotropy that keeps domain walls narrow, com-             determines the solution.
+bined with the DMI that lowers the energy cost of cre-               A second class of limitations stems from the physical
+ating them. At smaller dNV the sensor would resolve               model itself: the reconstruction is only as good as the as-
+these structures directly and prevent this overfitting. At        sumed model. Its parameters may be off: a ±20 % uncer-
+λhigh = 103 , the energy term dominates and the op-               tainty in the saturation magnetization Ms , for instance,
+timizer favors a strictly physical solution that conflicts        propagates into a 10 % to 14 % shift in the optimized ef-
+with the data. To compensate, dNV is artificially in-             fective distance d∗NV . It may also be incomplete, neglect-
+creased to blur and dampen the simulated stray field,             ing variation of the magnetization along the film thick-
+producing a field noticeably weaker than the measure-             ness z, surface roughness, pinning sites, or additional en-
+ment. At λbal , the reconstructed magnetization m∗ bal-           ergy terms. Such inhomogeneities are not excluded in
+ances these extremes, minimizing the micromagnetic en-            principle: once characterized, they can be built into the
+                                                                                                                                                                5
+
+
+
+
+  (a)                ·10−2                                                                   (b)
+             1.4                                                                               100
+                            λlow                                                                                                                     λhigh
+
+             1.2
+                                                                                                       90
+                 1
+ Lenergy (m∗ )
+
+
+
+
+                                                                                           d∗NV (nm)
+             0.8
+                                                                                                       80
+                                                                                                                                      λbal
+             0.6                                                                                            λlow
+                                λbal
+             0.4                                                                                       70
+                                                                       λhigh
+             0.2
+                                                                                                       60
+                      0            0.2     0.4       0.6         0.8        1                               10−1          100   101            102   103
+                                         Ldata (m , d∗NV )
+                                                 ∗
+                                                                                                                                 λ
+
+   FIG. 3: L-curve analysis for experimental measurement data. (a) The L-curve illustrates the trade-off
+   between the data-fidelity term Ldata and the normalized regularization energy Lenergy . The square marks the
+ balanced operating point λbal ≈ 25, where d∗NV plateaus (b). (b) Converged effective distance d∗NV as a function of
+                                          the regularization parameter λ.
+
+
+
+
+                     Exp. Data                     λ=0                          λlow                               λbal                λhigh
+                                                                                                                                                      1.0
+
+                                                                                                                                                      0.5
+m∗z
+
+
+
+
+                            ?                                                                                                                         0.0
+
+                                                                                                                                                      −0.5
+
+                                                                                                                                                      −1.0
+
+                                                                                                                                                      5.0
+
+                                                                                                                                                      2.5
+                                                                                                                                                             kA/m
+H dem
+
+
+
+
+                                                                                                                                                      0.0
+
+                                                                                                                                                      −2.5
+
+                                                                                                                                                      −5.0
+
+                          dNV =?                d∗NV = 54.1 nm            d∗NV = 72.7 nm                    d∗NV = 80.7 nm        d∗NV = 95.0 nm
+
+
+     FIG. 4: Influence of regularization strength λ on reconstructed magnetization and field maps.
+Comparison between reconstructed magnetizations m∗ and their corresponding demagnetizing fields H dem (m∗ , d∗NV )
+  across varying λ. The first column shows the experimental measurement and the second the unregularized λ = 0
+ inversion, which overfits the data into an unphysical, high-energy texture. While higher regularization yields a less
+  diffuse m∗ , it results in a poorer fit to the experimental field. At high λ values, the field strength is significantly
+       underestimated, indicating a decoupling from the experimental data in favor of the regularization term.
+                                                                                                                         6
+
+same differentiable energy and forward model. Two inter-         magnetization. Ultimately, this combination of a differ-
+nal consistency checks can flag such effects when they re-       entiable forward model and a differentiable micromag-
+main unmodeled, although they cannot identify the cause          netic energy formulation serves as a template for adapt-
+of an inconsistency. The first is the shape of the L-curve       ing physics-informed reconstructions to other magnetic
+itself. When the energy prior and the measurement can-           imaging modalities.
+not be simultaneously satisfied, the corner softens and
+d∗NV no longer settles onto a clear plateau. Comparison
+against a synthetic baseline or other datasets makes this                    AUTHOR CONTRIBUTIONS
+easier to recognize (SM Sec. IV.B). The second check
+is dynamic relaxation of the reconstructed state using              A.S. conceptualized the specific physics-informed re-
+the Landau-Lifshitz-Gilbert (LLG) equation [16, 22, 23],         construction framework, implemented the method, per-
+which simulates the temporal relaxation of the spin sys-         formed the synthetic and experimental evaluations, and
+tem towards an energy minimum. Because the recon-                wrote the original manuscript. This work builds upon
+struction minimizes the joint loss rather than the energy        the foundational concept of inverse micromagnetics es-
+alone, some relaxation is expected even for a correctly          tablished by F.B. and C.A., who developed the core in-
+specified model. Rapid evolution nevertheless shows that         verse micromagnetic simulation software magnum.np and
+the reconstructed state is not an equilibrium of the as-         NeuralMag. C.A., D.S. and F.B. also directly contributed
+sumed model, but it cannot distinguish whether the               to the development of the methodology. On the experi-
+model is incomplete or whether artifacts and noise im-           mental side, the samples were provided by H.Y. and C.Z.
+printed spurious structure on the state (SM Sec. IV.C).          Data acquisition was performed by Y.-G.C., H.B., L.B.,
+   Finally, the underlying reconstruction of the magneti-        C.D., and U.V. The NV magnetometry infrastructure is
+zation m from the magnetic field H remains fundamen-             overseen by C.D. and U.V. Additionally, Y.-G.C., U.V.
+tally ill-posed. Even with physics constraints, we are not       and C.A. supported the application of the method to the
+guaranteed to recover the true sample state. Moreover,           experimental data, including the configuration of simu-
+due to the highly non-convex nature of the micromag-             lation parameters and the interpretation of the results.
+netic energy landscape, gradient-based optimization can          All authors engaged in scientific discussions and reviewed
+converge to different metastable configurations depend-          the manuscript.
+ing on the initialization. Nevertheless, this framework             This research was funded in whole, or in part, by the
+allows us to find significantly better, physically plausi-       Austrian Science Fund (FWF) 10.55776/PIN1629824,
+ble solutions compared to unregularized inversion, and           10.55776/P34671, and 10.55776/PAT3864023 (IMECS).
+the (Ldata , Lenergy ) plane in which the L-Curve lives pro-     The computational results presented were achieved using
+vides a physics-grounded criterion for selecting a best          the Vienna Scientific Cluster (VSC-5). For the purpose
+guess among these candidate solutions: at equal data fit,        of open access, the author has applied a CC BY pub-
+prefer the lowest-energy configuration. At equal energy,         lic copyright license to any Author Accepted Manuscript
+prefer the better data fit. This allows informed choices         version arising from this submission.
+about initialization, optimizer, and other hyperparame-
+ters (SM Sec. II.E and V), which the data fit alone cannot
+rank meaningfully.
+   Looking forward, the same sensitivity to the physi-             ∗
+                                                                      alexander.setescak@univie.ac.at
+cal assumptions that bounds the reconstruction is also            [1] F. Casola, T. van der Sar, and A. Yacoby, Probing
+a source of physical insight. Where the measurement is                condensed matter physics with magnetometry based on
+informative, comparing how different energy models sta-               nitrogen-vacancy centres in diamond, Nature Reviews
+bilize the reconstructed states at a given data fit can help          Materials 3, 17088 (2018).
+point to the dominant physical mechanisms. Where it is            [2] Y. Xu, W. Zhang, and C. Tian, Recent advances on
+                                                                      applications of NV- magnetometry in condensed matter
+not, the prior still ensures that the recovered state is a
+                                                                      physics, Photonics Research 11, 393 (2023).
+physical solution consistent with the data. This varia-           [3] G. E. Backus, Non-uniqueness of the external
+tional approach is also easily extendable: multi-height or            geomagnetic field determined by surface inten-
+multi-orientation NV acquisitions could add complemen-                sity measurements, Journal of Geophysical Re-
+tary constraints that further reduce the non-uniqueness               search (1896-1977) 75, 6339 (1970),             eprint:
+of the inversion in realistic noisy, finite-field-of-view mea-        https://agupubs.onlinelibrary.wiley.com/doi/pdf/10.1029/JA075i031p
+surements. Moreover, because the framework relies on              [4] F. Bruckner, C. Abert, G. Wautischer, C. Huber,
+                                                                      C. Vogler, M. Hinze, and D. Suess, Solving Large-
+a differentiable forward model, additional auxiliary ex-
+                                                                      Scale Inverse Magnetostatic Problems using the Adjoint
+perimental parameters (such as relative shifts in multi-              Method, Scientific Reports 7, 40816 (2017).
+distance acquisitions) or even parameters like the sat-           [5] C. B. Clement, J. P. Sethna, and K. C. Nowack, Recon-
+uration magnetization Ms (when dNV is independently                   struction of Current Densities from Magnetic Images by
+known) can in principle be co-optimized jointly with the              Bayesian Inference (2021), arXiv:1910.12929 [physics].
+                                                                                                                           7
+
+ [6] H. J. Hug, B. Stiefel, P. J. A. van Schendel, A. Moser,     [19] C. Zhang, Z. Jiang, J. Jiang, W. He, J. Zhang, F. Hu,
+     R. Hofer, S. Martin, H.-J. Güntherodt, S. Porthun,              S. Zhao, D. Yang, Y. Liu, Y. Peng, H. Yang, and
+     L. Abelmann, J. C. Lodder, G. Bochi, and R. C.                   H. Yang, Above-room-temperature chiral skyrmion lat-
+     O’Handley, Quantitative magnetic force microscopy on             tice and Dzyaloshinskii–Moriya interaction in a van der
+     perpendicularly magnetized samples, Journal of Applied           Waals ferromagnet F e3−x GaT e2 , Nature Communica-
+     Physics 83, 5609 (1998).                                         tions 15, 4472 (2024).
+ [7] Y. Feng, A.-O. Mandru, O. Yıldırım, and H. Hug, Quan-       [20] L. Rondin, J.-P. Tetienne, T. Hingant, J.-F. Roch,
+     titative Magnetic Force Microscopy: Transfer-Function            P. Maletinsky, and V. Jacques, Magnetometry with
+     Method Revisited, Physical Review Applied 18, 024016             nitrogen-vacancy defects in diamond, Reports on
+     (2022).                                                          Progress in Physics 77, 056503 (2014).
+ [8] C. Yao, Y. Yu, Y. Shi, J.-I. Jung, Z. Váci, Y. Wang,       [21] R. J. Blakely, Potential Theory in Gravity and Magnetic
+     Z. Liu, C. Zhang, S. Tikoo-Schantz, and C. Zu, Universal         Applications (Cambridge University Press, Cambridge,
+     reconstruction of complex magnetic profiles with minimal         1995).
+     prior assumptions, Physical Review Applied 24, 064020       [22] L. D. Landau and E. M. Lifshitz, Theory of the disper-
+     (2025).                                                          sion of magnetic permeability in ferromagnetic bodies,
+ [9] D. A. Broadway, M. Flaks, A. E. Dubois, and                      Physikalische Zeitschrift der Sowjetunion 8, 153 (1935).
+     P. Maletinsky, Reconstruction of nontrivial magnetiza-      [23] T. L. Gilbert, A phenomenological theory of damping in
+     tion textures from magnetic field images using neural            ferromagnetic materials, IEEE Transactions on Magnet-
+     networks, Physical Review Applied 23, 044012 (2025).             ics 40, 3443 (2004).
+[10] A. Dubois, D. Broadway, A. Stark, M. Tschudin,              [24] R. Bodenberger and A. Hubert, Zur bestimmung
+     A. Healey, S. Huber, J.-P. Tetienne, E. Greplova, and            der blochwandenergie von einachsigen ferromag-
+     P. Maletinsky, Untrained Physically Informed Neural              neten, physica status solidi (a) 44, K7 (1977), eprint:
+     Network for Image Reconstruction of Magnetic Field               https://onlinelibrary.wiley.com/doi/pdf/10.1002/pssa.2210440146.
+     Sources, Physical Review Applied 18, 064076 (2022).         [25] A. Hubert and R. Schäfer, Magnetic domains: the anal-
+[11] D. Suess, A. Setescak, J. Smith, F. Bruckner, H. J. Hug,         ysis of magnetic microstructures, softcover reprint of
+     and C. Abert, Reconstruction of magnetic structures and          the hardcover 1st ed. 1998, corrected printing 2000 ed.
+     material parameters with convolutional neural network            (Springer, Berlin Heidelberg, 2014).
+     and bias field-constrained micromagnetic relaxation, Sci-   [26] S. Rohart and A. Thiaville, Skyrmion confinement
+     entific Reports 15, 42867 (2025).                                in ultrathin film nanostructures in the presence of
+[12] P. C. Hansen and D. P. O’Leary, The Use of the L-                Dzyaloshinskii-Moriya interaction, Physical Review B
+     Curve in the Regularization of Discrete Ill-Posed Prob-          88, 184422 (2013).
+     lems, SIAM Journal on Scientific Computing 14, 1487         [27] J. Bradbury, R. Frostig, P. Hawkins, M. J. Johnson,
+     (1993).                                                          C. Leary, D. Maclaurin, G. Necula, A. Paszke, J. Van-
+[13] D. Calvetti, S. Morigi, L. Reichel, and F. Sgallari,             derPlas, S. Wanderman-Milne, and Q. Zhang, JAX: Au-
+     Tikhonov regularization and the L-curve for large dis-           tograd and XLA, Astrophysics Source Code Library ,
+     crete ill-posed problems, Journal of Computational and           ascl:2111.002 (2021), aDS Bibcode: 2021ascl.soft11002B.
+     Applied Mathematics Numerical Analysis 2000. Vol. III:      [28] M. Blondel, Q. Berthet, M. Cuturi, R. Frostig, S. Hoyer,
+     Linear Algebra, 123, 423 (2000).                                 F. Llinares-López, F. Pedregosa, and J.-P. Vert, Efficient
+[14] Z. Xu, M. L. Palm, W. Huxter, K. Herb, J. M. Aben-               and modular implicit differentiation, in Advances in Neu-
+     droth, K. Bouzehouane, O. Boulle, M. S. Gabor, J. Ur-            ral Information Processing Systems, Vol. 35 (2022) pp.
+     restarazu Larranaga, A. Morales, J. Rhensius, G. Puebla-         5230–5242.
+     Hellmann, and C. L. Degen, Minimizing Sensor-Sample         [29] D. P. Kingma and J. Ba, Adam: A Method for Stochastic
+     Distances in Scanning Nitrogen-Vacancy Magnetometry,             Optimization (2017), arXiv:1412.6980 [cs].
+     ACS Nano 19, 8255 (2025).                                   [30] G. Bécigneul and O.-E. Ganea, Riemannian adaptive op-
+[15] C. Abert, F. Bruckner, A. Voronov, M. Lang, S. A.                timization methods (2019), arXiv:1810.00760 [cs.LG].
+     Pathak, S. Holt, R. Kraft, R. Allayarov, P. Flauger,        [31] M. Kochurov, R. Karimov, and S. Kozlukov,
+     S. Koraltan, T. Schrefl, A. Chumak, H. Fangohr, and              Geoopt: Riemannian Optimization in PyTorch (2020),
+     D. Suess, NeuralMag: an open-source nodal finite-                arXiv:2005.02819 [cs].
+     difference code for inverse micromagnetics, npj Compu-      [32] magnum.np developers, Inverse Problems — magnum.np
+     tational Materials 11, 193 (2025).                               2.2.0 documentation, https://magnum.np.gitlab.io/
+[16] F. Bruckner, S. Koraltan, C. Abert, and D. Suess, mag-           magnum.np/inverse_problems.html (2026), accessed:
+     num.np: a PyTorch based GPU enhanced finite differ-              2026-02-18.
+     ence micromagnetic simulation framework for high level      [33] A. Paszke, S. Gross, F. Massa, A. Lerer, J. Bradbury,
+     development and inverse design, Scientific Reports 13,           G. Chanan, T. Killeen, Z. Lin, N. Gimelshein, L. Antiga,
+     12054 (2023).                                                    A. Desmaison, A. Köpf, E. Yang, Z. DeVito, M. Rai-
+[17] See Supplemental Material at the end of this docu-               son, A. Tejani, S. Chilamkurthy, B. Steiner, L. Fang,
+     ment for the upward-continuation derivation, simulation          and S. Chintala, PyTorch: An Imperative Style, High-
+     setup, sign-ambiguity analysis, synthetic validation and         Performance Deep Learning Library (2019).
+     diagnostics, sensitivity study, and the physical composi-   [34] W. Xie, J. Zhang, Y. Bai, Y. Liu, H. Wang, P. Yu, J. Li,
+     tion of the extracted effective distances, which includes        H. Chang, Z. Wang, F. Gao, G. Wei, W. Zhao, and
+     Refs. [24–34].                                                   T. Nie, Air stability and composition evolution in van
+[18] C. Abert, Micromagnetics and spintronics: models and             der Waals F e3 GeT e2 , APL Materials 12, 031102 (2024).
+     numerical methods, The European Physical Journal B
+     92, 120 (2019).
+                                                                                                                       8
+
+      Supplementary Material for “A Fourier-Space Approach to Physics-Informed
+         Magnetization Reconstruction from Nitrogen-Vacancy Measurements”
+
+         I.   DERIVATION OF THE FOURIER-SPACE UPWARD CONTINUATION OPERATOR
+
+   This section details the analytical derivation of the transfer function used to upward continue magnetic stray fields
+from a discretized simulation grid to an arbitrary measurement height (effective distance). This formulation accounts
+for the finite volume averaging inherent in finite-difference discretizations and allows for continuous differentiability
+with respect to the effective distance dNV .
+
+
+                            A.   Magnetostatic Governing Equations in Fourier Space
+
+  In a source-free region above a magnetic sample, the magnetic field H satisfies Maxwell’s equations for magneto-
+statics:
+
+                                                        ∇ × H = 0,                                                  (S1)
+                                                         ∇ · H = 0.                                                 (S2)
+
+The curl-free condition implies that the field can be expressed as the gradient of a magnetic scalar potential, H = −∇Φ.
+Substituting this into the divergence-free condition yields Laplace’s equation:
+
+                                                         ∇2 Φ = 0.                                                  (S3)
+
+We define the geometry such that the magnetic material is confined to the half-space z < z0 , and the region z > z0
+is free space. To solve this, we apply a two-dimensional Fourier transform over the lateral coordinates (x, y):
+                                                     Z ∞Z ∞
+                                                   1
+                                Φ̃(kx , ky , z) =           Φ(x, y, z) e−i(kx x+ky y) dx dy.                    (S4)
+                                                  2π −∞ −∞
+
+In Fourier space, Laplace’s equation becomes an ordinary differential equation in z:
+                                              2          
+                                               ∂        2
+                                                    − k     Φ̃(k, z) = 0,                                           (S5)
+                                               ∂z 2
+           q
+where k = kx2 + ky2 is the magnitude of the in-plane wave vector. For the region z > z0 , we require the potential to
+vanish as z → ∞. Consequently, the physical solution is restricted to the decaying exponential branch:
+
+                                              Φ̃(k, z) = Φ̃(k, z0 ) e−k(z−z0 ) .                                    (S6)
+
+Since the magnetic field components are spatial derivatives of the potential (H̃x = −ikx Φ̃, H̃y = −iky Φ̃, H̃z = k Φ̃),
+every component of the magnetic field vector H̃ follows the exact same exponential decay law as the potential:
+
+                                                H̃(z) = H̃(z0 ) e−k(z−z0 ) .                                        (S7)
+
+
+                                         B.   Correction for Cell-Averaging
+
+   In finite-difference micromagnetic simulations, the computed stray field Hdem is typically not a point value at a
+specific height z, but rather a volume-averaged value over a discretization cell of vertical thickness ∆z .
+   We define the averaged field ⟨H̃⟩ over a vacuum layer of thickness ∆z , extending from the sample surface z0 to
+z0 + ∆z , as follows [18]:
+                                                                    Z z0 +∆z
+                                                               1
+                                         ⟨H̃⟩[z0 ,z0 +∆z ] =                   H̃(z) dz.                            (S8)
+                                                               ∆z    z0
+                                                                                                                       9
+
+Substituting the analytical decay behavior from Eq. (S7) into this integral yields
+
+                                                                     Z z0 +∆z
+                                                         H̃(z0 )
+                                     ⟨H̃⟩[z0 ,z0 +∆z ] =                         e−k(z−z0 ) dz                      (S9)
+                                                          ∆z          z0
+                                                                              z0 +∆z
+                                                        H̃(z0 )     1
+                                                      =           − e−k(z−z0 )                                     (S10)
+                                                          ∆z        k           z0
+                                                                  1 − e−k∆z
+                                                                           
+                                                      = H̃(z0 )               .                                    (S11)
+                                                                     k∆z
+
+This expression relates the discrete simulation output ⟨H̃⟩ to the exact field value at the surface H̃(z0 ). By inverting
+this relationship, we obtain a de-averaging factor that reconstructs the surface field:
+                                                                                          
+                                                                                  k∆z
+                                        H̃(z0 ) = ⟨H̃⟩[z0 ,z0 +∆z ] ·                          .                   (S12)
+                                                                               1 − e−k∆z
+
+
+
+                                               C.    Upward Continuation
+
+
+  To determine the magnetic field at an arbitrary height z (where z > z0 ), we apply the standard upward continuation
+operator to the reconstructed surface field H̃(z0 ):
+
+                                                H̃(z) = H̃(z0 ) · e−k(z−z0 ) .                                     (S13)
+
+Substituting Eq. (S12) into Eq. (S13) provides the complete transfer function:
+                                                                                  
+                                                                        k∆z
+                                   H̃(z) = ⟨H̃⟩[z0 ,z0 +∆z ] ·                         · e−k(z−z0 ) ,              (S14)
+                                                                     1 − e−k∆z
+
+which is the transfer function used in the main text. The final magnetic field distribution in real space, H(z), is
+recovered via the inverse two-dimensional Fourier transform. This formulation ensures that the simulated signal is
+explicitly differentiable with respect to the measurement height z, enabling gradient-based optimization of the effective
+distance dNV .
+
+
+
+                                      II.   DETAILED SIMULATION SETUP
+
+
+  The micromagnetic simulations were conducted using a finite-difference discretization. The results in this work were
+produced with the open-source library NeuralMag [15], running on JAX and using its cell-averaged discretization. The
+same forward model was originally prototyped in the functionally equivalent PyTorch-based magnum.np [16] and yields
+equivalent results, so this is an implementation choice rather than a physical assumption. To ensure the numerical
+model accurately reproduces the experimental behavior of the Fe3−x GaTe2 flake, we selected material parameters
+based on recent literature and the mesh discretization based on characteristic length scales.
+
+
+
+                                      A.    Micromagnetic Energy Formulation
+
+
+  Following the micromagnetic framework of Abert et al. [18], we define the total energy over the domain Ω as the
+sum of five contributions: the exchange energy (E ex ), the demagnetization energy (E dem ), the uniaxial anisotropy
+energy (E aniu ), the interfacial Dzyaloshinskii–Moriya interaction energy (E dmii ), and the Zeeman energy (E Zee ) due
+                                                                                                                      10
+
+to the applied bias field. These contributions are given by
+                                           Z
+                              Etotal (m) =     A |∇m|2 dV
+                                             Ω
+                                           |      {z     }
+                                                    E ex
+
+                                               µ0 Ms
+                                                       Z
+                                           −                 m · Hdem dV
+                                                 2         Ω
+                                           |                 {z         }
+                                                           E dem
+                                               Z
+                                           −        Ku (m · eu )2 dV
+                                                Ω                                                                  (S15)
+                                           |            {z          }
+                                                       E aniu
+                                               Z
+                                           +        Di [m · ∇(ed · m) − (∇ · m)(ed · m)] dV
+                                                Ω
+                                           |                        {z                     }
+                                                                        E dmii
+                                                       Z
+                                           −µ0 Ms              m · Hbias dV .
+                                                           Ω
+                                           |                   {z          }
+                                                           E Zee
+
+Here, A denotes the exchange stiffness constant, µ0 the vacuum permeability, Ms the saturation magnetization, Ku
+the uniaxial anisotropy constant, Di the interfacial DMI constant, and Hbias the externally applied bias field. The
+unit vectors eu and ed define the uniaxial anisotropy axis and the interface normal direction, respectively. In the
+present study, both directions coincide with the out-of-plane direction, i.e., eu = ed = ez .
+
+
+                                               B.      Material Parameters
+
+  The material parameters at T = 295 K are adopted from recent work characterizing the same Fe3−x GaTe2 flake [19].
+They report an exchange stiffness of A ≈ 0.70 pJ m−1 , an effective anisotropy of Keff ≈ 0.30 MJ m−3 , and an interfacial
+Dzyaloshinskii-Moriya interaction constant of Di ≈ −0.51 mJ m−2 . The sign of Di follows the convention of Eq. (S15)
+as implemented in magnum.np [16]. The NeuralMag [15] backend used for the reported reconstructions adopts the
+opposite sign convention for the interfacial-DMI energy, so the same physical chirality is obtained there with Di ≈
++0.51 mJ m−2 . The saturation magnetization, Ms , is derived via a phenomenological domain wall model [24]. By
+matching the experimentally observed domain wall width w and energy density δw , Ms is calculated as
+                                                  s
+                                                    4πβ δw
+                                            Ms =              ≈ 53 kA m−1 ,                                        (S16)
+                                                       µ0 w
+
+where δw = 0.22 mJ m−2 , w = 0.24 µm [19], µ0 is the vacuum permeability, and β is a phenomenological fitting param-
+eter that is approximately 0.31 for magnets with high magnetocrystalline anisotropy [19]. The effective anisotropy Keff
+aggregates both crystalline and shape contributions. However, micromagnetic solvers already calculate the demag-
+netizing field (shape anisotropy). To avoid double-counting this energy, we need to calculate the intrinsic crystalline
+anisotropy Ku , which is then to be used as the simulation input:
+                                                               1
+                                                    Ku = Keff + µ0 Ms2 .                                           (S17)
+                                                               2
+This relation isolates Ku by re-adding the shape anisotropy energy component subtracted in the effective anisotropy
+formulation [25]. This relation is only valid for thin films with out-of-plane uniaxial anisotropy, where the demagne-
+tizing factors are approximately Nz = 1 and Nx = Ny = 0.
+
+
+                                         C.    Discretization and Geometry
+
+  The spatial discretization was determined
+                                 p           by the characteristic magnetic length scales of the system, specifically
+the exchange length [25], lex =     A/Keff , and the DMI length [26], lD = 2A/|Di |. Along the surface normal,
+                                                                                                                      11
+
+the discretization is ∆z = 100 nm across two layers: the bottom representing the magnetic material, and the top
+representing vacuum for stray field calculations. To resolve the magnetic texture accurately and mitigate boundary
+artifacts, both measurements utilize a lateral discretization with the exact same 100-cell padding on all lateral sides
+relative to their regions of interest (ROI). For Measurement 1NV, the lateral cell size is ∆x = ∆y = 1 nm, and
+adding the 100-cell (100 nm) padding to the 800 nm × 800 nm ROI yields a 1000 × 1000 × 2 cell simulation grid. For
+Measurement 2NV, the lateral cell size is ∆x = ∆y ≈ 0.95 nm to cover a larger 1000 nm × 1000 nm ROI (1050 × 1050
+cells) and adding the 100-cell (≈ 95 nm) padding results in a grid of 1250 × 1250 × 2 cells.
+
+
+                                                     D.   Loss Terms
+
+   To enable a direct pixel-to-pixel comparison between simulation and experiment, the high-resolution simulation data
+is downsampled to the experimental spatial resolution by block-averaging adjacent cells. Measurement 1NV (N =
+100×100 pixels, pixel size 8 nm) is matched by averaging 8×8 blocks from the 1 nm simulation cells. Measurement 2NV
+(N = 150 × 150 pixels, pixel size ≈ 6.67 nm) is matched by averaging 7 × 7 blocks from the ≈ 0.95 nm simulation cells.
+   The data-fidelity loss is the normalized root-mean-square (RMS) error (NRMSE) between the simulated and mea-
+sured projected fields over all N pixels:
+                                                    v
+                                                         N
+                                                    u
+                                                    u 1 X                            2
+                                                    u       Hidem (m, dNV ) − Himeas
+                                                    u N i=1
+                                                    u
+                                  Ldata (m, dNV ) = u
+                                                    u            N
+                                                                                        .                        (S18)
+                                                    u         1  X
+                                                                       meas
+                                                                            2
+                                                    t                H
+                                                             N i=1 i
+
+A value of Ldata = 0 indicates a perfect fit, while Ldata = 1 means the RMS mismatch equals the RMS of the
+measured field (as poor as predicting zero everywhere), so that a value of 0.1 corresponds to a 10 % relative error. For
+masked reconstructions the sums run only over unmasked pixels, and the denominator is computed on the same set.
+We minimize NMSE (squared form yields cleaner gradients). NRMSE values reported in the figures are obtained by
+taking the square root of the converged NMSE.
+  The regularization term is the normalized total micromagnetic energy:
+                                                              Etotal (m) − Eref
+                                              Lenergy (m) =                     ,                                  (S19)
+                                                                     |Eref |
+where Eref is the energy of a uniform out-of-plane state (m = ez ). Subtraction centers Lenergy near zero for near-
+uniform states, and division by |Eref | makes λ dimensionless. While this remains a somewhat arbitrary reference choice,
+the uniform state represents a lower-energy reference state than the skyrmion lattice configuration (Etotal (m) > Eref ),
+meaning we consistently obtain positive values (Lenergy > 0). Under this normalization, Lenergy = 0 corresponds to
+the uniform out-of-plane state, and a value of Lenergy = 1 is assigned to a hypothetical completely non-magnetic
+configuration (m = 0, where all micromagnetic energy contributions vanish). The full joint loss minimized is
+                                     J(m, dNV ) = L2data (m, dNV ) + λ Lenergy (m),                                (S20)
+consistent with the λ values used throughout this supplement.
+
+
+                                         E.     Gradient-Based Minimization
+
+   The loss J(m, dNV ) from Eq. (S20) is minimized using automatic differentiation as provided by the underlying
+tensor frameworks: either JAX [27] (used here via NeuralMag [15]) or PyTorch [33] (used via magnum.np [16]). Both
+the magnetization field m and the effective distance dNV are optimized jointly. The unit-norm constraint |m| = 1 is
+enforced by construction (not as a penalty term, which would add a hyperparameter): without it, the minimization
+of the micromagnetic energy drives the magnitude of m to grow unbounded (as larger magnitudes can lower certain
+energy terms without limit), making the regularization meaningless. We use parametrizations that automatically
+enforce this constraint.
+   Regardless of the specific update rule, the optimization is initialized from a magnetization guess m0 (the choice of
+which is discussed in Sec. V D) and an effective-distance guess dNV,0 (whose influence is examined in Sec. V A), and
+follows the same iterative procedure:
+                                                                                                                    12
+
+   1. Forward Pass: Compute the demagnetizing field H dem (m, dNV ) and total energy Etotal (m).
+
+   2. Loss Evaluation: Using these quantities evaluate the loss J(m, dNV ).
+
+   3. Backward Pass: Automatic differentiation computes the gradients of J with respect to the free magnetization
+      variables and dNV .
+
+   4. Update: An optimizer step is taken to reduce J while keeping |m| = 1.
+
+The procedure iterates until a stopping condition (convergence or maximum number of iterations) is met, yielding
+the optimized quantities m∗ and d∗NV .
+  Two implementation approaches have worked well in our experiments, each paired with a unit-norm parametrization
+that enforces |m| = 1 automatically:
+  (i) Spherical parametrization + L-BFGS. L-BFGS is a highly efficient second-order quasi-Newton optimizer.
+However, because a standard Riemannian formulation of L-BFGS is not readily available, it is paired with a spherical
+coordinate representation. Each cell is parametrized as (θi , ϕi ) with
+
+                                       mi = (sin θi cos ϕi , sin θi sin ϕi , cos θi ),                           (S21)
+
+which is unit-norm by construction. The free variables θi , ϕi and dNV are updated using L-BFGS (jaxopt [28], strong-
+Wolfe line search, history size 100, 2000 iterations for the experimental reconstructions and 1000 for the synthetic
+validation of Sec. IV A). While fast and powerful, a key disadvantage of this coordinate-based approach is that a start
+from m = 0 is impossible. This is the configuration used for the primary reconstructions reported in this work.
+   (ii) Riemannian Adam on the unit sphere. Alternatively, we update mi ∈ S 2 directly using a Riemannian
+Adam optimizer. At each step, the Euclidean gradient gi is projected onto the tangent space of the sphere at the
+current state mi via gi⊥ = gi − (gi · mi )mi . This projected gradient is used by the Adam optimizer to compute a
+search direction vi , which is similarly projected to the tangent space: vi⊥ = vi − (vi · mi )mi . The update is then
+retracted back onto the sphere by normalization: mi ← normalize(mi + vi⊥ ). This scheme also accommodates a start
+from m = 0, even though the zero vector lies outside the unit-sphere manifold. The first step is then not a standard
+Riemannian update but a Euclidean gradient update whose normalization vi /∥vi ∥ projects the iterate onto the unit
+sphere. All subsequent steps are standard Riemannian updates. This first gradient combines the measurement term
+with the Zeeman energy, which is linear in m and therefore the only energy term with a nonzero gradient at m = 0.
+Since Adam maintains a running memory of the gradient, this initialization direction is seamlessly integrated into
+subsequent steps, providing a natural initialization trajectory. We use a custom JAX implementation of Riemannian
+Adam [30], the manifold generalization of Adam [29], with the standard Adam coefficients (β1 = 0.9, β2 = 0.999,
+ϵ = 10−8 ) and a step-decay learning rate (α0 = 3.0, decay factor 0.3 every 750 epochs) for 3000 epochs, which we use
+in Sec. V D to compare all initializations on an equal footing. For the PyTorch backend, a Riemannian optimizer is
+available out of the box in geoopt [31].
+   Both approaches yield consistent reconstructions in the well-balanced regularization regime. In our experiments,
+the spherical + L-BFGS combination is a convenient default when a starting guess with |m| = 1 is available: it carries
+no learning-rate schedule to tune, and the resulting reconstruction lies on the L-curve Pareto front (see Fig. S8).
+When no such starting guess is available, a cold start (m = 0) with Riemannian Adam is an equally valid choice and
+converges to a comparable reconstruction. The reconstructions reported here are produced with NeuralMag [15] on
+JAX, whose jit/vmap compilation kept the runtime of the λ-sweeps and Ms -sensitivity studies manageable on our
+hardware. A functionally equivalent PyTorch implementation of the same forward model is available in magnum.np,
+including a simplified demonstration of magnetization reconstruction from magnetic field data in its inverse-problem
+documentation [32].
+
+
+                        III.   ANALYSIS OF ODMR SIGN AMBIGUITY ARTEFACTS
+
+   We analyse the NV magnetometry datasets of the Fe3−x GaTe2 sample to evaluate the impact of Optically Detected
+Magnetic Resonance (ODMR) sign ambiguity artefacts. Throughout this work, Measurement 2NV serves primarily
+as a diagnostic and robustness test case for artefact handling and model–data consistency. The quantitative results
+of the main text are based on Measurement 1NV. NV magnetometry probes the projection of the local magnetic
+field onto the quantization axis of the nitrogen–vacancy (NV) center. Each NV center defines a fixed crystallographic
+axis nNV along one of the four ⟨111⟩ directions of the diamond lattice. In the present measurements, a single NV
+                                                                                                                         13
+
+orientation is addressed, whose axis lies in the x–z plane at the tetrahedral angle θ = 54.74◦ relative to the sample
+normal (z-axis), set by the diamond ⟨111⟩ lattice direction:
+
+                                                  nNV = (sin θ, 0, cos θ).                                            (S22)
+
+The magnetic field component sensed by the NV is therefore the scalar projection of the total magnetic field onto this
+axis,
+
+                                               H∥ = (Hbias + Hdem ) · nNV ,                                           (S23)
+
+where Hbias denotes the applied external bias field and Hdem the sample stray field.
+  ODMR spectroscopy does not directly measure H∥ , but rather the Zeeman splitting of the NV electronic spin
+resonances. In the presence of a magnetic field component along nNV , the ms = ±1 spin states split symmetrically
+around the zero-field splitting, resulting in a frequency separation
+
+                                                     ∆f = 2γNV |H∥ |,                                                 (S24)
+
+where γNV is the NV gyromagnetic ratio [20]. Since ODMR is sensitive only to the magnitude of the frequency
+splitting, it yields |H∥ | and is intrinsically insensitive to the sign of the projected magnetic field along the NV axis.
+A bias field is therefore required for quantitative imaging, as it defines a reference direction and lifts the degeneracy
+of the spin transitions. In our analysis, we define the reported measurement field H meas , displayed in Fig. S1, as the
+total field magnitude minus the bias contribution:
+
+                                                  H meas = |H∥ | − H bias .                                           (S25)
+
+Under ideal conditions, where H∥ > 0 across the entire scan, this simplifies to H meas = H dem . However, if the
+sample stray field locally opposes and exceeds the applied bias field (H dem < −H bias ), the term |H∥ | undergoes a sign
+inversion.
+   As presented in Fig. S1, the pixel value histograms (in kA m−1 ) therefore reveal a pronounced asymmetry between
+positive and negative field values. In Measurement 2NV, positive values extend to approximately 10 kA m−1 , whereas
+negative values exhibit an abrupt cutoff near −4 kA m−1 . This cutoff corresponds approximately to the magnitude
+of the applied bias field (which was H bias ≈ 4.0 kA m−1 for Measurement 2NV, compared to H bias ≈ 3.2 kA m−1 for
+Measurement 1NV). In practice, Hbias is not perfectly spatially homogeneous, and small variations in its magnitude
+across the field of view imply that the precise threshold for sign inversion varies locally. Consequently, instead of
+marking a single threshold value, we highlight the lowest 10 % of field values in green. This interval represents a critical
+regime where the total projected field approaches zero, |H bias + H dem | ≈ 0, and ODMR sign ambiguity artefacts are
+most likely to occur.
+   The impact of this ambiguity is clearly visible in the one-dimensional line cuts. Under artifact-free conditions, the
+stray field exhibits smooth, approximately parabolic local minima. In Measurement 2NV, however, several profiles
+display deep minima that are rectified into characteristic W-shaped features, as observed in Lines A, D, E, and F.
+These profiles indicate regions where H dem locally opposes and exceeds H bias , causing the measured signal to fold
+back as the true field crosses zero. In contrast, Measurement 1NV was acquired at a larger effective NV–sample
+distance, resulting in smaller stray-field amplitudes. As illustrated by Line B, the corresponding field profiles form
+plateaus rather than sharp inversions, indicating that the total projected field approaches but does not significantly
+cross the sign-reversal threshold.
+   This comparison also enables the validation of subtler magnetic features. For example, the smaller magnetic field
+texture intersected by Line C is confirmed to be a genuine feature rather than an artefact, as its local minimum
+remains well separated from the artifact-prone signal range. Given the minimal presence of critical ODMR sign
+ambiguity artefacts, Measurement 1NV was selected for the magnetization reconstruction.
+
+
+                       A.   Impact on Reconstructed Magnetization and Masking Strategy
+
+  The W-shaped rectification artefacts identified above translate directly into spurious features in the reconstructed
+magnetization. Because the forward model expects a physically consistent stray-field signature, pixels where the
+measured field has been folded back by the sign ambiguity present an inconsistent target that the optimizer cannot
+satisfy. In the Measurement 2NV dataset, the pronounced rectification features visible in Lines D, E, and F introduce
+                                                                                                                         14
+
+                                         Measurement 1NV              Measurement 2NV
+                          800
+
+
+
+
+                Pixel Count
+                          600
+
+                          400
+
+                          200
+
+                               0
+                               −10           −5    0     5   10 −10   −5     0      5        10
+                                                  kA/m                     kA/m
+               Line A
+                                                                                                 Line D
+                                                                                                          5.0
+
+                                                                                                          2.5
+                                                                                                 Line E
+
+
+
+
+                                                                                                                 kA/m
+                                                                                                          0.0
+
+               Line B                                                                                     −2.5
+
+               Line C                                                                                     −5.0
+                                                                                                 Line F
+
+
+                                    Line A                                              Line D
+                               5
+                kA/m
+
+
+
+
+                               0
+
+
+                              −5
+
+
+                                    Line B                                              Line E
+                              5.0
+
+                              2.5
+              kA/m
+
+
+
+
+                              0.0
+
+                     −2.5
+
+                     −5.0
+                        4
+                                    Line C                                              Line F
+                               2
+                kA/m
+
+
+
+
+                               0
+
+                              −2
+
+                              −4
+
+
+      FIG. S1: Analysis of ODMR sign ambiguity artifacts. Histograms show the magnetic field pixel value
+distributions for Measurement 1NV and Measurement 2NV. The red dashed lines mark the 0th and 10th percentiles
+of the field distribution; the green shaded region in the histogram and in the field maps represent the lowest 10 % of
+ field values. The same percentile thresholds are indicated in the corresponding 1D line cuts (A–F) with red dashed
+  lines. These line cuts illustrate field profiles across selected features, distinguishing artifact-free behavior (Line C),
+     plateau formation (Line B), and folded artifacts (Lines A, D, E, F). In the 1D line plots, solid green segments
+ indicate the artifacts in the measurement and the green dashed lines represent how the magnetic field likely looked
+                                                           in reality.
+                                                                                                                      15
+
+false magnetic texture in the reconstructed m∗x and m∗z components (Fig. S2b): the unmasked reconstruction shows
+fine-scale patterns with no physical origin, consistent with the mismatch between the folded measurement and the
+model-predicted field. The masked reconstruction, which excludes the artefact-prone pixels from the data-fidelity
+term, suppresses these spurious features and recovers a smoother, more physically plausible texture.
+   The artefact-prone pixels are identified by a data-driven threshold-and-fill criterion that extends the percentile
+analysis above to also cover the enclosed, fully folded areas, and the resulting excluded region is outlined by the green
+contour in the masked reconstruction rows. For Measurement 1NV, where ODMR sign-ambiguity artefacts are mild,
+masking shifts the inferred d∗NV negligibly (Fig. S2a). For Measurement 2NV, where these artefacts are far more
+pronounced, masking leaves d∗NV at the operating point essentially unchanged (63.6 nm masked vs. 63.9 nm unmasked
+at λbal = 25). The effect of masking on the stability of the full d∗NV (λ) trace is analysed in Sec. IV B.
+
+
+                              IV.   VALIDATION AND CONSISTENCY CHECKS
+
+                                        A.   Validation with Synthetic Data
+
+   We validate the joint reconstruction framework under controlled conditions using synthetic NV measurements
+generated from a ground-truth magnetization mref at a reference mean effective distance dref NV = 80 nm. The reference
+configuration mref is generated by taking a reconstruction of the experimental Measurement 1NV (at λ = 10) and
+subjecting it to micromagnetic relaxation under the Landau-Lifshitz-Gilbert (LLG) equation (see Sec. IV C for details).
+   To test the robustness of the effective distance inference, we compare a baseline uniform-distance case against
+two cases introducing lateral fluctuations in the effective distance (RMS amplitudes δdamp = 3 nm and 6 nm with a
+correlation length of 80 nm), e.g., arising from sample surface roughness.
+   To simulate these measurements, the stray fields are computed at discrete vertical slices in Fourier space, inter-
+polated pixel-wise in real space at the local coordinates d(x, y) = drefNV + δd(x, y), and block-averaged to match the
+experimental spatial resolution of 8 nm. Starting from an initial guess dNV,0 = 80 nm and an informed initialization
+of the magnetization (Sec. V D), we jointly optimize m and the uniform effective distance dNV . An L-curve sweep
+determines the balanced regularization parameter λbal ≈ 10, which marks the corner of the L-curve and, for the two
+roughness scenarios, the minimum of the mean magnetization error ⟨∥m∗ − mref ∥2 ⟩ (Fig. S3).
+   At λbal , the mean magnetization error converges to ≈0.058 for all three scenarios (Fig. S3(c)), while the inferred
+effective distance shifts systematically below the ground truth, from 79.6 nm at baseline to 78.2 nm and 74.3 nm at
+δdamp = 3 nm and 6 nm (Fig. S3(b)). This downward bias is a geometric consequence of the exponential field decay:
+closer regions of a rough surface dominate the sensed amplitude, so the best uniform effective distance fit settles below
+the mean. The reconstructed magnetization (Fig. S4, shown for the 6 nm case) reproduces the domain-wall profile
+correctly because the wall width and chirality are pinned by the energy regularizer, but the exact domain shape and
+position are not recovered faithfully: at an effective distance of 80 nm with 8 nm measurement pixels the stray field is
+largely insensitive to exact structure.
+
+
+                                       B.    Model Accuracy Across Datasets
+
+   The L-curve can also serve as an internal consistency check between model and data. Since the synthetic dataset
+is inverted using its own forward model, its L-curve and d∗NV (λ) trace represent the ideal, best-case reference. Both
+experimental datasets show a gap to this reference (Fig. S5), which is consistent with real-world model deviations such
+as unmodeled Ms inhomogeneities, film-thickness variations, or residual ODMR sign-ambiguity artefacts (Sec. III).
+It can, however, also contain contributions from measurement noise, the finite field of view, non-uniqueness, and
+incomplete optimization, and therefore flags a possible inconsistency without identifying its cause.
+   The two datasets also differ in behavior. Measurement 1NV is closer to the synthetic baseline, retaining a clear
+L-curve corner and a stable d∗NV plateau (80.2 to 81.5 nm over λ = 10 to 160). In contrast, Measurement 2NV
+exhibits a broader L-curve and a drifting d∗NV . This difference in behavior may stem from two key factors. First,
+Measurement 2NV is affected by more pronounced ODMR sign-ambiguity and measurement artefacts (Sec. III).
+Second, the smaller effective distance of Measurement 2NV probes the magnetization on sharper spatial scales, so any
+disagreement between our model and the actual sample is simply more visible.
+   To isolate the source of this instability, we analyze the masked, unmasked, and 25 %-cropped variants of Mea-
+surement 2NV. The cropped variant excludes the bottom 25 % of the scan area to remove both the large ODMR
+sign-ambiguity artifacts and the significant blurring in the bottom-right corner (whose physical origin is uncertain).
+                                                                                                                           16
+
+              m∗x                        m∗z                         H dem(m∗, d∗NV )               H meas
+                                                          1.00
+                                                                                                                       6
+
+                                                          0.75
+ MASKED
+
+
+
+
+                                                                                                                       4
+                                                          0.50
+
+                                                                                                                       2
+                                                          0.25
+
+
+
+
+                                                                                                                           kA/m
+                                                          0.00         d∗NV = 80.7 nm                                  0
+
+
+                                                          −0.25
+                                                                                                                       −2
+ UNMASKED
+
+
+
+
+                                                          −0.50
+                                                                                                                       −4
+                                                          −0.75
+
+                                                                                                                       −6
+                                                          −1.00
+                                                                       d∗NV = 80.9 nm
+
+   (a) Measurement 1NV (800 nm × 800 nm), λbal ≈ 25. The masked and unmasked results are nearly identical. A subtle
+magnetisation distortion is visible in the top-right corner of the unmasked reconstruction, where the optimizer accommodates
+                                                 inconsistent folded-signal pixels.
+
+
+
+                                                                                                                       6
+                                                          0.75
+ MASKED
+
+
+
+
+                                                                                                                       4
+                                                          0.50
+
+
+                                                                                                                       2
+                                                          0.25
+
+
+
+
+                                                                                                                           kA/m
+                                                                       d∗NV = 63.6 nm
+                                                          0.00                                                         0
+
+
+                                                          −0.25
+                                                                                                                       −2
+ UNMASKED
+
+
+
+
+                                                          −0.50
+                                                                                                                       −4
+
+                                                          −0.75
+                                                                                                                       −6
+
+
+                                                                       d∗NV = 63.9 nm
+
+(b) Measurement 2NV (1000 nm × 1000 nm), λbal ≈ 25. In the unmasked reconstruction, W-shaped rectification artefacts (see
+        Lines D–F in Fig. S1) introduce additional or distorted magnetic textures not present in the masked result.
+
+    FIG. S2: Reconstructions for both experimental NV scan areas. Each panel shows two rows: masked
+   reconstruction (top) and unmasked reconstruction (bottom). Columns: reconstructed in-plane component m∗x ,
+out-of-plane component m∗z , simulated stray field H dem (m∗ , d∗NV ), and measured field H meas . The green contour in
+the masked row delineates the excluded artefact-prone pixels. The inferred effective distance d∗NV is indicated below
+                the simulated field column for each row and is not significantly affected by masking.
+                                                                                                                                                                                            17
+
+                 (a)                                                           (b)                                                          (c)
+                0.008                                                          110
+                                       Baseline (uniform dNV )                                    Baseline (uniform dNV )                                     Baseline (uniform dNV )
+                                                                                                                                            0.4
+                                       δdamp = 3 nm                                               δdamp = 3 nm                                                δdamp = 3 nm
+
+
+
+
+                                                                                                                                  ⟨∥m∗ − mref ∥2⟩
+                                                                               100
+                0.006                  δdamp = 6 nm                                               δdamp = 6 nm                                                δdamp = 6 nm
+
+
+
+
+                                                                   d∗NV (nm)
+                                                                                                                                            0.3
+Lenergy
+
+
+
+
+                                                                                                  dNV,ref = 80 nm
+                                                                                90
+                0.004                                                                                                                       0.2
+                                                                                80
+                0.002                                                                                                                       0.1
+                                                                                70
+                        0.0      0.2         0.4     0.6     0.8                     10−1         100    101     102        103                     10−1      100       101   102         103
+                                           Ldata                                                          λ                                                             λ
+
+    FIG. S3: L-curve analysis for synthetic measurement data across three dNV scenarios. (a) L-curve
+       (data-fidelity loss vs. regularization energy) for the baseline (uniform dNV ) and two rough-surface cases
+(δdamp = 3 nm and 6 nm) with distance fluctuations. Squares mark λbal ≈ 10. (b) Converged effective distance d∗NV
+ as a function of λ. The dashed line marks the ground-truth reference dref   NV = 80 nm. (c) Mean magnetization error
+   ⟨∥m∗ − mref ∥2 ⟩ vs. λ. At low λ the three scenarios diverge. At λbal ≈ 10 they converge to a common error of
+                                  ≈0.058, the minimum for the two roughness scenarios.
+
+                              mref,x                       mref,z                           1.0                dNV                        95                   H meas               7.5
+
+                                                                                                                                          90                                        5.0
+                                                                                            0.5
+ Ground truth
+
+
+
+
+                                                                                                                                          85                                        2.5
+
+
+
+
+                                                                                                                                                                                           kA/m
+                                                                                                                                                nm
+                                                                                            0.0                                           80                                        0.0
+
+                                                                                                                                          75                                        −2.5
+                                                                                            −0.5
+                                                                                                                                          70                                        −5.0
+
+                                                                                            −1.0                                          65                dref                    −7.5
+                                                                                                                                                             NV = 80 nm
+
+                               m∗x                           m∗z                            1.0          ∥m∗ − mref ∥2                                     H dem(m∗, d∗NV )         7.5
+
+                                                                                                                                          1.5                                       5.0
+                                                                                            0.5
+                                                                                                                                                                                    2.5
+λbal = 10
+
+
+
+
+                                                                                                                                                                                           kA/m
+                                                                                                                                          1.0
+                                                                                            0.0                                                                                     0.0
+
+                                                                                                                                                                                    −2.5
+                                                                                            −0.5                                          0.5
+                                                                                                                                                                                    −5.0
+
+                                                                                            −1.0                                          0.0              d∗NV = 74.3 nm           −7.5
+
+
+  FIG. S4: Synthetic reconstruction summary for the δdamp = 6 nm roughness scenario at λbal = 10. Top
+ row: Ground-truth reference magnetization components mref                  ref
+                                                                  x and mz ; effective distance map dNV illustrating the
+                                                                           meas
+  6 nm-amplitude roughness; and the simulated NV projected field H              . Bottom row: Reconstructed components
+    m∗x and m∗z ; cell-wise L2 error ∥m∗ − mref ∥2 , largest at domain walls; and the model-predicted projected field
+                                     H dem (m∗ , d∗NV ), which closely reproduces H meas .
+
+
+As shown in Fig. S5(b), masking already narrows the spread of the d∗NV (λ) trace (50 to 76 nm masked against 42
+to 86 nm unmasked over the full sweep), and discarding the problematic region stabilizes the optimization further,
+yielding a plateau-like trace: over λ = 10 to 160 the cropped variant spans 61.0 to 63.8 nm, compared to 61.9 to
+66.2 nm masked and 61.4 to 67.4 nm unmasked. This suggests that the dominant inconsistency is localized to specific
+non-ideal regions (e.g., boundary artifacts or local material defects) rather than representing a fundamental failure of
+                                                                                                                           18
+
+  (a)                                                              (b)
+     0.030                                     synthetic                      110
+                                               1NV (masked)
+                                                                              100
+     0.025                                     1NV (unmasked)
+                                               2NV (masked)
+                                                                               90
+     0.020                                     2NV (unmasked)
+
+
+
+
+                                                                  d∗NV (nm)
+Lenergy
+
+
+
+
+                                               2NV (25% crop)                  80
+     0.015
+                                                                               70
+     0.010                                                                     60
+
+     0.005                                                                     50
+
+                                                                               40
+             0.0   0.2      0.4      0.6       0.8       1.0                        10−1   100   101         102         103
+                                  Ldata                                                          λ
+
+ FIG. S5: L-curve and effective distance convergence across all three datasets. (a) L-curve (data-fidelity
+       loss vs. total energy) for the synthetic baseline, masked/unmasked variants of Measurement 1NV, and
+     masked/unmasked/25 %-cropped variants of Measurement 2NV. The synthetic curve shows a sharp corner
+  characteristic of a well-posed inversion. The experimental curves broaden progressively, with Measurement 2NV
+displaced to significantly higher data-fidelity loss, consistent with its stronger ODMR sign-ambiguity artifacts. (b)
+ Converged effective distance d∗NV as a function of λ. For the synthetic case and Measurement 1NV, d∗NV plateaus
+  over a broad λ range. For Measurement 2NV, the masked and unmasked variants drift monotonically, while the
+25 %-cropped variant recovers a plateau-like trace (Sec. IV B). Filled squares mark the operating point λbal on each
+                   curve (λbal = 10 for the synthetic sweep, λbal = 25 for all experimental sweeps).
+
+
+the chosen physical model.
+
+
+
+                                    C.     Stability of Reconstructed Configurations
+
+
+  As an additional consistency check beyond field agreement, the stability of the optimized configurations m∗ was
+evaluated under Landau–Lifshitz–Gilbert (LLG) relaxation [16, 22, 23]. If these reconstructed states represented true
+equilibria, they would remain static, satisfying the condition that the magnetic torque vanishes:
+
+                                                        m × Heff = 0,                                                   (S26)
+
+where the effective field Heff is the functional derivative of the total energy Etotal with respect to the magnetization [18]:
+
+                                                                  1 δEtotal
+                                                     Heff = −               .                                           (S27)
+                                                                µ0 Ms δm
+
+The reconstructed structures do not abruptly collapse, indicating that they reside in a low-energy region of the state
+space, but they exhibit a slow spatial drift or gradual deformation as the system relaxes under the chosen energy
+functional. Some relaxation is expected by construction, since the reconstruction minimizes the joint loss of Eq. (S20)
+rather than the energy alone, so the optimized state need not be an exact energy minimum even for a perfectly
+specified model. Beyond this, the drift is consistent with minor discrepancies between the experimental sample (e.g.,
+local pinning sites, thickness variations) and the simplified simulation model, which prevent the discovery of a strictly
+static solution under the assumed material parameters. The relaxation itself cannot distinguish such model error
+from spurious structure imprinted on m∗ by measurement artifacts or noise. In either case, the reconstructed m∗
+is not a true micromagnetic equilibrium: for the assumed Fe3−x GaTe2 material parameters we did not find a static
+configuration resembling the reconstructed skyrmion-lattice texture.
+                                                                                                                       19
+
+                                V.     SENSITIVITY AND ROBUSTNESS STUDY
+
+  To assess the reliability of the joint reconstruction, we examine how the converged effective distance d∗NV responds
+to changes in the optimization starting point and in the assumed material parameters. All studies in this section use
+the experimental Measurement 1NV data.
+
+
+                                  A.    Robustness to the Initial Effective Distance
+
+  We verify that the joint optimization of dNV is insensitive to its initialization. Starting from four initial guesses
+dNV,0 ∈ {40, 60, 80, 100} nm at λ = 25, all runs converge to the same effective distance (Table S1).
+
+TABLE S1: Robustness to the initial effective distance. Converged effective distance d∗NV at λ = 25 for four
+                                     different initial guesses dNV,0 .
+
+                                                  dNV,0 (nm) d∗NV (nm)
+                                                      40        80.70
+                                                      60        80.70
+                                                      80        80.69
+                                                     100        80.70
+
+
+
+
+                                  B.    Sensitivity to the Saturation Magnetization
+
+   Because the saturation magnetization Ms directly determines the strength of the stray field compared with the
+measured values, it is probably the most influential model parameter for the effective distance optimization. Since
+Ms is itself derived from a phenomenological domain-wall model (Eq. (S16)), we quantify how an uncertainty in this
+value propagates into the reconstructed effective distance. We repeat the full L-curve sweep with Ms varied by ±20 %
+relative to the reference value and compare the resulting d∗NV (λ) curves in Fig. S6. A ±20 % variation in Ms shifts
+d∗NV by 10 %–14 % (8 nm–11 nm for 1NV, 7 nm–9 nm for 2NV), but at the same λ value all three Ms variants recover
+the same domain texture.
+
+
+                                        C.   Sensitivity to the Film Thickness
+
+   The magnetic layer is modelled as a single cell of thickness ∆z = 100 nm, equal to the nominal flake thickness. Since
+the stray field is set by the product Ms ∆z , an uncertainty in the thickness affects the reconstructed effective distance
+similarly to an uncertainty in Ms . To quantify this, we repeat the reconstruction at the operating point λ = 25 for
+thicknesses ∆z between 60 and 140 nm and record the converged d∗NV (Fig. S7).
+   The converged d∗NV increases monotonically with ∆z , but the dependence is strongly nonlinear. Near the nominal
+thickness it is weak: a ±20 % change in ∆z shifts d∗NV by less than 5 % for both datasets, about a third of the shift
+caused by the same relative change in Ms . The change is much larger at the thin end, where a step from 60 to 70 nm
+moves d∗NV far more than a step from 110 to 120 nm. This is intuitive, since for a thin film the material sits closer to
+the sensor, so an added layer has a stronger effect on the measured field than the same layer added to a thicker film
+further away. The domain configuration is preserved over the whole range, with the reconstructed domains becoming
+slightly smaller toward the thin end.
+
+
+                                D.     Sensitivity to the Magnetization Initialization
+
+  Finally, we examine the dependence of the reconstruction on the initial magnetization state. Using the same
+Riemannian-Adam optimizer throughout, we compare five starting configurations: an informed initialization in which
+positive out-of-plane domains are placed at peaks detected in the measured field H meas (Fig. S8(b)), a cold start
+(m = 0), a random configuration, a uniform in-plane state (my = +1), and a uniform out-of-plane state (mz = −1).
+                                                                                                                                                              20
+
+                                                        mz                                                                                 mz
+                 (a) 1NV                       −1        0         1                                 (b) 2NV                          −1   0    1
+
+                          Ms (reference)                                                                      Ms (reference)
+            95
+                          +20% Ms                                   d∗NV = 89 nm
+                                                                                               80             +20% Ms                           d∗NV = 71 nm
+            90            −20% Ms                                                                             −20% Ms
+
+            85                                                                                 70
+d∗NV (nm)
+
+
+
+
+                                                                                   d∗NV (nm)
+            80                                                      d∗NV = 81 nm                                                                d∗NV = 64 nm
+                                                                                               60
+            75
+
+            70                                                                                 50
+                                                                    d∗NV = 70 nm                                                                d∗NV = 55 nm
+            65
+                                     λ = 25                                                                              λ = 25
+                      100              102                                                                   100           102
+                                λ                                                                                    λ
+
+  FIG. S6: Sensitivity of the converged effective distance to the saturation magnetization. (a) 1NV and
+ (b) 2NV: converged effective distance d∗NV versus λ for the reference Ms and ±20 % variants (squares mark λ = 25,
+dotted line), together with the reconstructed m∗z maps at that operating point. For 1NV, the reference d∗NV = 81 nm
+   shifts to 89 nm (8 nm) for +20 % Ms and to 70 nm (−11 nm) for −20 % Ms ; for 2NV the corresponding shifts are
+    7 nm and −9 nm from the reference of 64 nm. Despite these ∼ 10 %–14 % changes in the effective distance, the
+                    reconstructed domain texture is visually unchanged across all three Ms values.
+
+                                                    mz                                                                                     mz
+                 (a) 1NV                      −1    0        1                                            (b) 2NV                     −1   0    1
+
+                                                                                                     66
+            84
+                                                                 ∆z = 140 nm                                                                        ∆z = 140 nm
+            82                                                   d∗NV = 85 nm                                                                       d∗NV = 66 nm
+                                                                                                     64
+            80
+d∗NV (nm)
+
+
+
+
+                                                                                         d∗NV (nm)
+
+
+
+
+            78                                                                                       62
+                                                                 ∆z = 100 nm                                                                        ∆z = 100 nm
+                                                                 d∗NV = 81 nm                                                                       d∗NV = 64 nm
+            76
+                                                                                                     60
+            74
+                                                                 ∆z = 60 nm                                                                         ∆z = 60 nm
+            72                                                   d∗NV = 71 nm                        58                                             d∗NV = 57 nm
+
+                                ∆z = 100 nm                                                                             ∆z = 100 nm
+            70
+                     75       100     125                                                                    75       100     125
+                           ∆z (nm)                                                                                  ∆z (nm)
+
+   FIG. S7: Sensitivity of the converged effective distance to the film thickness. (a) 1NV and (b) 2NV:
+converged effective distance d∗NV as a function of the layer thickness ∆z at λ = 25, with the reconstructed m∗z maps
+at ∆z = 140, 100 (nominal, dotted line) and 60 nm (squares). For 1NV the nominal d∗NV = 81 nm ranges from 71 nm
+  at 60 nm to 85 nm at 140 nm; for 2NV the reference 64 nm ranges from 57 to 66 nm. The dependence is strongly
+    nonlinear and saturates above the nominal thickness, and the texture is preserved across the range, with the
+                                       domains slightly smaller at the thin end.
+
+
+The informed initialization is additionally run with the second-order L-BFGS optimizer of the main text, giving six
+runs in total.
+  All six runs converge to a consistent effective distance and reproduce the measured field to a comparable degree
+(Fig. S8(a)). The reconstructed m∗z textures, however, differ visibly at small scales (Fig. S8(c)), a direct consequence
+                                                                                                                                                                                                                                                             21
+
+of the non-uniqueness of the inverse problem, which persists even after the micromagnetic energy is added to the
+loss. The large-scale reconstruction is therefore robust across the initializations compared here, while the fine-scale
+structure remains underdetermined in this case. Because the precise outcome of each run depends on the numerical
+setup (optimizer, initialization, and regularization strength) rather than being a universal property of the framework,
+we rank the candidates with the (Ldata , Lenergy ) phase plot, preferring the lower-energy configuration at equal data
+fit as in the main text. The informed L-BFGS reconstruction of the main text is adopted on this basis.
+              (a)                                                                       (b)                                     (c)
+     0.0075                                                                                    • informed
+                                                          m=0                                                                                                                                                                                   1.0
+                                                                                                                                        ■m = 0         ▼ my = +1        ♦ mz = −1         ▲ random         • informed      ⋆ informed (LBFGS)
+                                                          my = +1
+                        d∗NV = 79.7 nm
+                                                          mz = −1                                                                                                                                                                               0.5
+                                                          random
+     0.0070                                               informed
+
+
+
+
+                                                                               mz,0
+
+
+
+
+                                                                                                             m∗z
+                                                          informed (LBFGS)                                                                                                                                                                      0.0
+
+
+                d∗NV = 79.7 nm                                                                                                                                                                                                                  −0.5
+     0.0065                                      d∗NV = 80.4 nm
+                                                                                                                                                                                                                                                −1.0
+Lenergy
+
+
+
+
+                                                      d∗NV = 79.8 nm
+                                                                                                                                                                                                                                                6
+     0.0060                              d∗NV = 81.0 nm
+                                                                                                                                                                                                                                                4
+
+
+
+
+                                                                                                             H dem(m∗, d∗NV )
+                                                                                                                                                                                                                                                2
+
+
+
+
+                                                                                                                                                                                                                                                    kA/m
+                                                                               H meas
+
+
+
+
+                                                              d∗NV = 80.7 nm                                                                                                                                                                    0
+     0.0055
+                                                                                                                                                                                                                                                −2
+
+                                                                                                                                                                                                                                                −4
+                                                                                                                                      d∗NV = 80.4 nm   d∗NV = 79.8 nm   d∗NV = 79.7 nm   d∗NV = 81.0 nm   d∗NV = 79.7 nm      d∗NV = 80.7 nm
+                                                                                                                                                                                                                                                −6
+     0.0050
+                    0.100        0.105   0.110        0.115         0.120
+                                         Ldata
+
+
+
+FIG. S8: Sensitivity to the magnetization initialization. Reconstructions are performed with the Riemannian
+       Adam (R-Adam) optimizer starting from five different initializations: zero (m = 0), uniform out-of-plane
+(mz = −1), uniform in-plane (my = +1), random, or informed (derived from the H meas peaks shown in (b)). For the
+informed initialization, the L-BFGS reconstruction from the main text is added for comparison. (a) shows each final
+reconstruction in the phase plot (Lenergy versus Ldata at λ = 10). (b) shows the detected peaks in the measured field
+ H meas and the resulting initial out-of-plane magnetization mz,0 used for the informed case. (c) shows the difference
+  in the reconstructed out-of-plane magnetization m∗z structure (top row) despite very similar simulated stray fields
+                                             H dem (m∗ , d∗NV ) (bottom row).
+
+
+
+                                 VI.         PHYSICAL COMPOSITION OF THE EXTRACTED EFFECTIVE DISTANCES
+
+          The effective distance is the total separation between the magnetic material and the NV sensing center,
+
+                                                                                              dNV = dimplant + dcontact + doxide + dtilt ,                                                                                                                 (S28)
+
+comprising the NV implantation depth in the diamond, the surface oxidation layer of the sample, and the physical
+sample–diamond separation, which we split into the mechanical contact gap and the tilt-induced geometric offset
+(Fig. S9). These contributions are not directly measured for the present setup. We therefore estimate them from the
+fabrication and setup parameters, guided by the systematic characterization of comparable scanning-NV probes by
+Xu et al. [14].
+   Implantation depth (dimplant ). The NV centers are implanted at a beam energy of 6 keV, which we estimate places
+them 10 to 20 nm below the locally tilted diamond side. Xu et al. measure NV depths of 5 to 14 nm (median 9 nm)
+for similar tips implanted at 7 keV [14].
+   Contact gap (dcontact ). In AFM contact the mechanical gap at the contact point is only a few nanometres in the
+ideal case, but surface features on the diamond tip, such as lithography residues with peak heights of 20 to 50 nm
+or material picked up during scanning, as well as adsorbate layers, can prevent a closer approach and enlarge the
+effective distance [14].
+   Tilt offset (dtilt ). The bottom of the diamond tip is 200 to 400 nm wide and the NV can lie anywhere across it.
+A relative tilt between tip and sample makes one edge the contact pivot, so a laterally offset NV is held above the
+contact point, which we estimate adds 0 to 40 nm. The same part of the tip stays in contact throughout a scan, so
+this offset is constant within a measurement.
+   Oxidation layer (doxide ). The uncapped, air-sensitive flakes develop a surface oxide that acts as a magnetically
+dead spacer. On the closely related Fe3 GeTe2 , this air-formed oxide thickens progressively over weeks of ambient
+exposure [34]. For the present flakes, which show progressive degradation over months of storage, we estimate 10 to
+30 nm.
+                                                                                                                        22
+
+                                  dimplant        Diamond tip
+                                (10–20 nm)            NV
+
+
+                                                                                 dtilt (0–40 nm)
+                        dNV
+                                                                 pivot           dcontact (few nm)
+                                     Oxidation layer                             doxide (10–30 nm)
+
+                                    Magnetic material
+
+
+FIG. S9: Physical composition of the effective distance dNV . Schematic (not to scale) of the contributions to
+ the NV–material separation: the implantation depth dimplant below the diamond side, the mechanical contact gap
+dcontact , the tilt offset dtilt that lifts the laterally offset NV above the contact pivot, and the sample oxidation layer
+doxide . The implantation depth is measured normal to the locally tilted side, so the listed ranges sum to the vertical
+                                       dNV only up to a cos factor of the small tilt angle.
+
+
+  Taken together, these estimates are consistent with the 26 to 128 nm effective NV–sample distances (medians 43
+and 60 nm for the two feedback modes) measured across 15 scanning-NV probes by Xu et al. [14]. Both extracted
+values, d∗NV ≈ 81 nm for Measurement 1NV and d∗NV ≈ 64 nm for Measurement 2NV, fall within this range.
+  Both scans used the same tip and were taken about a week apart, on different Fe3−x GaTe2 flakes from the same
+exfoliation on a common substrate. Since the tip was not exchanged, the implantation depth is fixed and a tip
+change can be ruled out as the origin of the 17 nm difference. The remaining contributions are sample- and contact-
+dependent. The two flakes can differ in thickness, and since the tip was retracted and re-approached for each scan,
+the contact geometry and the associated tilt offset may not be identical between the two sessions. The later scan
+(Measurement 1NV) also carries the larger extracted distance, which matches the direction expected for progressive
+surface oxidation under ambient air storage, although a 17 nm change within a week exceeds what is documented for
+the related Fe3 GeTe2 , and no oxidation data exist for Fe3−x GaTe2 itself. We therefore attribute the difference to a
+combination of these sample- and contact-dependent effects.
+

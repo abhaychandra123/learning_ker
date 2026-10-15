@@ -1,0 +1,140 @@
+\section{What architectures to learn, build, and compare}
+\label{sec:architectures}
+\subsection{A learning order tied to implementation milestones}
+\begin{longtable}{P{26mm}P{57mm}P{68mm}}
+\toprule Learn in order & Concept and reference & Implement and explain before moving on\\\midrule\endhead
+1. Proximal inference & ISTA/FISTA and LISTA~\cite{lista}; ALISTA~\cite{alista} & Derive the gradient, adjoint, shrinkage, and step bound; distinguish optimization error from field error.\\
+2. Residual CNN & Signed regression and residual prediction & A small known-height field reconstructor; linear output, correct units, sensible initialization.\\
+3. U-Net & Multiscale encoder/decoder with skip paths~\cite{unet} & Compare local CNN and multiscale context; separate architecture choice from supervised training target.\\
+4. Conditioning & Feature modulation, e.g. FiLM~\cite{film} & Condition on physical height/pitch/noise, and prove with an ablation that metadata improves transfer.\\
+5. Learned data consistency & MoDL~\cite{modl} and VarNet~\cite{varnet} as transferable patterns & Combine a learned prior with the exact measurement operator, including crop and projection.\\
+6. Blind inference & Joint image/operator estimation~\cite{blinddps} & A bounded height update; diagnose prior-dependent calibration and degenerate solutions.\\
+7. Uncertainty & Calibration~\cite{guo}; conformal prediction~\cite{conformal} & Coverage and sharpness on a held-out calibration set; detect distribution-shift failures.\\
+8. Optional priors & DIP~\cite{dip}, plug-and-play~\cite{pnp}, FNO~\cite{fno} & Try only when the current failure suggests scan-specific fitting, stronger priors, or operator transfer.\\\bottomrule
+\end{longtable}
+For each reading, write half a page: variables estimated, prior, measurement operator, information supplied at test time, data split, and a failure relevant to QDM. Architecture labels do not replace this analysis.
+
+\subsection{A0: reproduce the existing physics-correction LISTA}
+The repository currently uses
+\begin{equation}
+ x_{k+1}=\operatorname{soft}_{\theta}\left[x_k-\alpha A^*(Ax_k-y)+C_b y+C_x x_k\right].
+\end{equation}
+Its two bias-free $9\times9$ single-channel corrections and scalar threshold are tied across layers. It has 163 trainable parameters, and zero corrections reproduce ISTA at initialization. $H$ is fixed in the current checkpoint/operator. Supervision targets sharp fields rather than sparse-optimization solutions; the distinction from original LISTA~\cite{lista} matters.
+
+\textbf{Useful first ablations.} Train versus zero correction; tied versus untied thresholds; input correction versus state correction; scalar versus per-component threshold; same physical prior at several trained depths; blurred versus zero initialization. Compare accuracy--latency curves. A trained layer has extra convolutions, so it is not equal in cost to an ISTA iteration. Preserve the trained-depth restriction and do not infer convergence of learned updates.
+
+\textbf{A controlled LISTA study you can run before the joint model.} Use trained depths $K\in\{4,8,16\}$ as an illustrative pilot grid, and compare (i) fixed true-height ISTA/FISTA, (ii) zero-correction LISTA, (iii) trained tied corrections, (iv) learn only steps/thresholds, and (v) untied corrections. Log field error after each trained stage, physical residual, learned parameter changes, inference memory, and latency. Select the depth on validation sources. The fixed-depth classical controls diagnose acceleration; epsilon-stopped classical controls diagnose optimization. They answer different questions and should both be reported.
+
+A learned-FISTA control can introduce bounded trained momentum into the same physics update. Treat it as a fixed-depth network; classical FISTA guarantees do not automatically apply to learned momentum or learned priors. If a compact step/threshold model matches a larger correction network, that is evidence to simplify the prior, not a reason to hide the smaller control.
+
+\subsection{A0b: coefficient LISTA for the Bathla dictionary}
+This is a distinct task with a genuinely sparse representation:
+\begin{equation}
+ c_{k+1}=\operatorname{soft}_{\tau_k}\left(c_k+\alpha_k D^TW^TW(y-Dc_k)\right).
+\end{equation}
+Learn bounded steps/thresholds first, then consider learned corrections. Inputs are measured projected maps; outputs are coil coefficients. Compare with LASSO, ridge, and applicable sign-constrained fits using activation labels. Derive near-plane fields only through independently validated physical source templates. A measured sensor-plane basis cannot itself supply a sharp reference-plane basis.
+
+\subsection{A1: supervised residual CNN and U-Net controls}
+Use a small residual CNN with approximately 4--6 convolutional blocks and 32--64 feature channels as an initial engineering configuration. A U-Net control can use 3--4 scales and comparable capacity. Predict $\hat x=x_0+R_\theta(y,m)$ with a linear final layer, where $m$ is metadata and $x_0$ is a declared physical or observation-derived initialization.
+
+Train from scratch on magnetic data. Natural-image priors and pretrained RGB weights can impose unsuitable textures. Do not use sigmoid output for signed microtesla fields. Avoid hidden resizing, instance normalization that discards meaningful amplitude, and random-crop training that silently changes the forward boundary conditions. Compare fixed amplitude metadata versus observation normalization with scale retained.
+
+Learn that a convolutional architecture is not automatically FOV/pitch invariant: a $9\times9$ kernel spans different physical distances as pitch changes. Global pooling for height estimation can also hide how much of a source is visible. Test these issues rather than claiming invariance from variable tensor dimensions.
+
+\subsection{A2: known-height conditioned physics network}
+Let $r_k=\mathcal M_hx_k-y$, and define
+\begin{align}
+ u_k &= x_k-\alpha_k\mathcal M_h^*W^TW r_k,\\
+ x_{k+1}&=u_k+R_\theta(u_k,\mathcal M_h^*W^TW r_k;m).
+\end{align}
+Condition the learned correction using a small metadata MLP. One FiLM-style implementation modulates feature channel $j$ by $\gamma_j(m)z_j+\beta_j(m)$. Proposed metadata include physical $\Delta x,\Delta y$, gap, noise estimates, amplitude scale, projection/channel availability, and observation mask. Standardize metadata using training statistics.
+
+Start with 6--8 stages, tied correction weights, and a conservative bounded step. These are pilot choices, not optimal hyperparameters. In a whitened problem the norm bound includes $W$, sampling, and projection; do not reuse the bound for an unweighted convolution. Removing conditioning, physics gradients, or stage tying gives informative controls.
+
+An alternative MoDL-style data-consistency block solves
+\begin{equation}
+ (\mathcal M_h^*W^TW\mathcal M_h+\rho I)x_{k+1}
+ =\mathcal M_h^*W^TW y+\rho D_\theta(x_k;m)
+\end{equation}
+approximately using conjugate gradients. For padded/cropped operators, apply the true composition rather than replacing it by multiplication with $|H|^2$. Report CG accuracy and its contribution to runtime; keep $\rho>0$.
+
+\subsection{A3: a strong two-stage calibration baseline}
+A height encoder produces $h_0=h_{\min}+(h_{\max}-h_{\min})\operatorname{sigmoid}(s_\phi(y,m))$. Define this admissible physical interval independently of the training range; it can be broader than the training heights. Extrapolation tests must remain within the declared interval, and observations outside it are flagged as unsupported. Feed the estimate to A2. Train the predictor on true simulation labels and the reconstructor first on correct heights, then on realistic predictor errors. Jointly training the two blocks without iterative height feedback is a stronger control than freezing a poorly trained predictor.
+
+For a scalar NV input, use the proper projection in $\mathcal M_h$ and a channel-availability mask. Vector outputs inferred from a scalar image require corresponding physical assumptions and can only be validated in channels with trusted reference data. Do not use current amplitude, source CAD, or true height in the network unless the inference regime declares them available.
+
+\subsection{A4: joint refinement prototype}
+Given $(x_k,h_k)$, perform the A2 field update and refine height. A physics-only candidate is
+\begin{align}
+ g_{h,k}&=\left\langle W r_k,W\,\partial_h\mathcal M_{h_k}x_k\right\rangle,\\
+ h_{k+1}&=\Pi_{[h_{\min},h_{\max}]}(h_k-\beta_k g_{h,k}).
+\end{align}
+An alternative learns a bounded correction from $r_k$, $x_k$, metadata, and residual spectral summaries. Use explicit supervision for $h$ and $x$ during simulation training. The residual gradient is a useful feature, but does not resolve non-identifiability by itself. A learned source prior or source-latent representation supplies additional restrictions.
+
+\begin{figure}[htbp]\centering
+\begin{tikzpicture}[node distance=6mm]
+\node[wideblock] (init) {$y$, pitch, projection, noise\\encoder initializes $(x_0,h_0)$};
+\node[wideblock,below=of init] (physics) {True forward/adjoint\\compute $r_k$ and field gradient};
+\node[wideblock,below left=10mm and 6mm of physics] (prior) {Conditioned learned prior\\update $x_{k+1}$};
+\node[wideblock,below right=10mm and 6mm of physics] (height) {Bounded height refinement\\update $h_{k+1}$};
+\node[wideblock,below=32mm of physics] (out) {Repeat a trained number of stages\\return field and calibration estimate};
+\draw[arrow] (init)--(physics);\draw[arrow] (physics)--(prior);\draw[arrow] (physics)--(height);
+\draw[arrow] (prior)--(out);\draw[arrow] (height)--(out);
+\draw[arrow] (out.east) -- ++(16mm,0) |- (physics.east);
+\end{tikzpicture}
+\caption{Proposed joint prototype. The exact operator handles known physics; the learned block encodes a data-dependent prior. Both height and reconstruction are trained and evaluated explicitly.}
+\end{figure}
+
+Do not change the analytical operator with unconstrained learned filters and simultaneously call the resulting scalar a physical distance. If adding $H_{\rm eff}=H_h+\Delta H_\psi$, bound and calibrate $\Delta H_\psi$, check Hermitian symmetry/reality, and test whether the correction absorbs height. Compare the pure analytical model, a calibration-only correction, and a trained correction on source/session holdouts.
+
+\subsection{A5: a candidate bank for ambiguous height}
+Choose an initial set of plausible heights $\{h_j\}_{j=1}^J$ and share the A2 reconstructor across candidates. Predict or optimize a field $x_j$ for each, then score the pairs using measurement likelihood and a learned source prior. A conceptual Bayesian score is
+\begin{equation}
+ \log p(h_j,x_j\mid y)\propto
+ -\tfrac12\norm{W(\mathcal M_{h_j}x_j-y)}^2+\log p_\theta(x_j)+\log p(h_j).
+\end{equation}
+This equation is not a justification for calling arbitrary network logits a posterior. If $p_\theta$ is unavailable as a normalized density, label scores as predictive weights and calibrate empirically. Height classification on true labels is a simple initial implementation. Then test continuous refinement, bin-width effects, and branch collapse.
+
+\begin{figure}[htbp]\centering
+\begin{tikzpicture}[node distance=6mm]
+\node[wideblock] (in) {Observed map + metadata};
+\node[block,below left=12mm and 17mm of in] (b1) {$h_1$\\shared inverse $\to x_1$};
+\node[block,below=12mm of in] (b2) {$h_2$\\shared inverse $\to x_2$};
+\node[block,below right=12mm and 17mm of in] (b3) {$h_J$\\shared inverse $\to x_J$};
+\node[wideblock,below=of b2] (score) {Pair scoring + held-out calibration};
+\node[wideblock,below=of score] (out) {Height set and associated fields\\one mode only when supported};
+\draw[arrow] (in)--(b1);\draw[arrow] (in)--(b2);\draw[arrow] (in)--(b3);
+\draw[arrow] (b1)--(score);\draw[arrow] (b2)--(score);\draw[arrow] (b3)--(score);\draw[arrow] (score)--(out);
+\end{tikzpicture}
+\caption{A proposed uncertainty-aware inference route. Compare its extra compute with ensembles, profiling, and a stronger single-branch model. Candidate pairs should not be collapsed into unrelated mean image and mean height values.}
+\end{figure}
+
+\subsection{A6: uncertainty-sensitive spectral refinement}
+This is a hypothesis motivated by E02--E03, not a verified new method. For a gap uncertainty $\sigma_h$, define sensitivity $s(f)=2\pi\norm f\sigma_h$. A provisional gate might be $w(f)=1/(1+s(f)^2)$, multiplied into the Fourier transform of a physics-gradient correction. Alternatively learn a gate conditioned on estimated spectral SNR, height distribution, and pixel spacing.
+
+Test fixed low-pass gates, gates from true height error as an \emph{oracle diagnostic}, and gates from predicted uncertainty. Gates can stabilize updates but also remove real detail. Derive their effect on signed spectra, test feature false negatives, and compare under matched compute. Cropping means this frequency operation is an approximate refinement/preconditioner, not an exact diagonalization of the whole observation operator.
+
+The candidate contribution is justified only if predicted uncertainty improves reliable detail recovery beyond simpler filtering and existing conditioned priors. Do not claim that a hand-selected gate is physically optimal.
+
+\subsection{A7: current-latent inference as a stronger physical prior}
+Predict a current stream function or parametrized conductor source, compute $J$, then use Biot--Savart to predict the measurement and the reference-plane field. Train the primary loss on the near-plane field. Where COMSOL supplies trusted $J$, add auxiliary current supervision as an explicitly available training signal. Compare with a field-first network receiving the same data.
+
+This representation reduces implausible independent-component outputs, but its assumptions may fail for contacts, finite thickness, vertical vias, or unknown multilayer sources. Geometry masks can be known metadata in one regime and unknown in another; report separate results. Recovering a latent $J$ that fits the field does not prove unique current recovery.
+
+\subsection{Optional architectures: when they are worth trying}
+\begin{tabularx}{\linewidth}{P{28mm}YY}
+\toprule Method & Use when & Main risk/control\\\midrule
+NAFNet-style restoration~\cite{nafnet} & Need a strong efficient CNN baseline & Retrain for signed fields; compare physics integration and compute\\
+Plug-and-play prior~\cite{pnp} & A magnetic-field denoiser is reliable & Denoiser need not minimize a known energy; test stability\\
+Deep Image Prior~\cite{dip} & Paired sharp real data are scarce & Scan-specific optimization can fit noise; stopping cannot use test truth\\
+Fourier neural operator~\cite{fno} & Resolution transfer remains a dominant failure & Mode truncation, domain extent, boundaries, and aliasing still matter\\
+Transformer or hybrid & Long-range source context matters beyond U-Net & More capacity is not novelty; matched strong CNN control\\
+Diffusion/score prior~\cite{blinddps} & Multimodal source inference needs richer priors & Training/compute cost and plausible hallucinations; posterior calibration\\\bottomrule
+\end{tabularx}
+
+\subsection{How to turn a failure into an architectural hypothesis}
+Use this chain: \emph{observation $\to$ mechanism $\to$ minimal change $\to$ controlled experiment $\to$ falsifiable claim}. Example: the predictor confuses source width with distance; therefore test separate height hypotheses coupled to one physical inverse, and measure whether ambiguous cases receive calibrated broad sets while ordinary cases retain accuracy. Compare against simply adding capacity.
+
+For the first paper, the recommended route is A0/A1/A2 controls $\to$ A3 $\to$ A4 $\to$ \emph{one} of A5 or A6 if the failures warrant it. A7 is a useful parallel scientific control when COMSOL current data are available; it should not double the entire project scope. Prior-informed joint calibration, FiLM, unrolling, ensembles, and diffusion are established ideas. Novelty must lie in an identifiable mechanism, analysis, and empirical evidence relative to relevant prior work, not the module names.
+
+\deliver{Keep a model card for every architecture: available inputs, estimated variables, prior, exact operator, trainable parameters, stage count, training objective, supervision, calibration method, latency, and excluded claims.}
