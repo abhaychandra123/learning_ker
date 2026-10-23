@@ -207,3 +207,70 @@ FISTA16 -10.9823 dB, ISTA500 -22.2125 dB, FISTA500 -55.3376 dB. Baseline
 lambdas were selected on validation only. These are single-seed synthetic
 results, not QDM scores or replicated paper tables. `ALISTA.md` records training
 protocol differences and the final legacy-percentile edge-case verification.
+
+## Synthetic QDM data pipeline (2026-10-23)
+
+`README_SYNTHETIC_DATASET.md` documents the new, separate dataset generation
+pipeline. `scripts/synthetic_data.py` prepares portable compact recipes from
+either a prepared COMSOL manifest or a completed combined comparison's saved
+COMSOL arrays. It propagates full lowest-plane fields analytically, applies
+physical vector quarter-turns, and adds deterministic Gaussian input noise.
+Noise sigma is a percentage of each clean propagated component's max–min range;
+1%/1.5% are experimental settings, not estimates inferred from COMSOL residuals.
+Default padding is 256 zero-extension pixels; the highest-plane boundary audit
+records periodic/default/double-padding discrepancies without attributing them
+solely to mesh noise. Original data and comparison runners are unchanged.
+
+`runs/synthetic_v1` contains 360 vector recipes / 1,080 scalar component pairs
+from three references, using 10 heights, four rotations, and 0%/1%/1.5% noise.
+This local dataset is all-train; variants are not independent geometries.
+Train-only normalization, geometry-level optional holdouts, portable checksums,
+component-at-a-time loading, fixed evaluation noise and optional fresh training
+noise are implemented. `scripts/plot_synthetic.py` produced nine preview figures
+and measured noise statistics in `runs/synthetic_v1_preview`; six components
+were materialized in `runs/synthetic_v1_smoke`. Eight NumPy CPU tests passed,
+the shell wrapper passed syntax checking, and real-data preparation/inspection/
+preview/export completed. No PyTorch or GPU check ran in this local Python.
+
+`hpc/generate_synthetic_direct.sh` is for the user to run on the remote machine.
+No remote commands or training were executed. The synthetic manifest is a new
+schema, not an input to the unchanged `compare_combined.py`. Next training work
+must explicitly connect its loader and known analytical padded operator to the
+shared-model trainer, select the split before training and keep synthetic versus
+actual COMSOL evaluation results separate. The previous 200-epoch model saw all
+three geometries, so it does not establish held-out performance on these data.
+
+The synthetic preview now lists every target height and the exact count
+30 geometry/height combinations × 4 rotations × 3 noise levels = 360 vector
+pairs (1,080 components). `plot_synthetic.py --comparison-run <combined-run>`
+adds verified actual COMSOL/analytical/residual figures, with `--refresh` for an
+existing preview. The local report covers L1_C1 at 1/6/10 µm, IC_4um at 3/6/10 µm
+and IC_2um at 2 µm, all three components (21 figures). Actual and synthetic
+references/grids are checked for equality; metrics and archive hashes are saved
+in `comsol_checks.csv` and `comsol_provenance.json`. These are noiseless forward
+comparisons, not reconstruction or noise-estimation results. Highest-plane
+metrics were checked against the existing boundary audit.
+
+## Standalone reconstruction command (2026-10-23)
+
+`scripts/reconstruct_combined.py` and `README_RECONSTRUCTION.md` provide a
+reusable inference/report CLI: `--run`, `--geometry`, `--standoff`, optional
+`--target-standoff`, `--component`, `--device`, and fresh `--output`. It loads
+`best.pt` and a checksum-verified saved pair operator, uses checkpoint
+normalization, processes one component at a time, and writes physical arrays,
+RMSE/range-NRMSE, figures and HTML. `--include-saved-baselines` adds archived
+ISTA/FISTA predictions with convergence metadata; it does not rerun solvers.
+`--input`/`--reference` accept calibrated NPY fields on the selected geometry
+grid. New inputs never borrow a COMSOL reference automatically. Explicit
+`--operator analytic` supports new heights with supplied inputs, with the
+trained experiment's padding and a changed-operator caveat in the report.
+
+Local `runs/combined_full_200` lacks checkpoints AND has an empty physics folder.
+The explicit `--saved-results` mode reports archived predictions without either;
+it never implies fresh inference. A full 10→0.5 µm L1_C1 report was generated in
+`runs/reconstruction_L1_C1_10um_preview`, with six figures, exact archived LISTA
+arrays and all 15 solver/component errors agreeing with original CSV metrics
+within 0.0001 percentage points. Three new tests passed; one actual PyTorch
+checkpoint/normalization test was skipped because local Python has no torch.
+Fresh inference/GPU execution remains to be checked by the user on the training
+machine. No remote commands or retraining were performed.

@@ -479,6 +479,10 @@ default requested all-data fitting run. Do not retune against its test scores.
 
 Reloadable model example (inside a configured Python session):
 
+For a reusable command with `--geometry`, `--standoff`, `--target-standoff`,
+automatic figures and RMSE/NRMSE reporting, use
+`scripts/reconstruct_combined.py`. See [README_RECONSTRUCTION.md](README_RECONSTRUCTION.md).
+
 ```python
 import sys
 sys.path.insert(0, 'scripts')
