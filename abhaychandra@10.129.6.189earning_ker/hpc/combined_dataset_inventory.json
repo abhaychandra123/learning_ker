@@ -1,0 +1,150 @@
+{
+  "audit": "Full CSV conversion, within-geometry grid alignment and prepared-array checksum verification passed",
+  "pairing": "anchor",
+  "pairs": 17,
+  "component_pairs": 51,
+  "geometries": {
+    "L1_C1": {
+      "grid": {
+        "nx": 1400,
+        "ny": 1400,
+        "x0": -41.95000000000001,
+        "y0": -38.95,
+        "dx": 0.10000000000000142,
+        "dy": 0.10000000000000142
+      },
+      "heights_um": [
+        0.5,
+        1.0,
+        2.0,
+        3.0,
+        4.0,
+        5.0,
+        6.0,
+        7.0,
+        8.0,
+        9.0,
+        10.0
+      ],
+      "sources": [
+        {
+          "path": "data/L1_C1_Z0p5um_600uA_0p1PR_MF_B.csv",
+          "sha256": "f3ba0f0b0b4143e3d48cc2d404bdfa04c392bccc04500d547e5cbc38343f453c"
+        },
+        {
+          "path": "data/L1_C1_Z1p0um_600uA_0p1PR_MF_B.csv",
+          "sha256": "b09415ad6abca121b85f04afbca21b9d7b16e0d5fe310791b69585169d886daf"
+        },
+        {
+          "path": "data/L1_C1_Z2p0um_600uA_0p1PR_MF_B.csv",
+          "sha256": "2c888aa709c1d267c2cb1ae9b8d1dc1f36a2fc85e1475d4eb5dd601c2d2c5d07"
+        },
+        {
+          "path": "data/L1_C1_Z3p0um_600uA_0p1PR_MF_B.csv",
+          "sha256": "3c9cf3b77e4bf163e54bfdc1d1b1150f6e38f35855ddc24d62bd2bace136d8dc"
+        },
+        {
+          "path": "data/L1_C1_Z4p0um_600uA_0p1PR_MF_B.csv",
+          "sha256": "4e5c886e0557d56f67e2c7c599bbc87ec0a5ba5af06b90c239155a73fdbecddd"
+        },
+        {
+          "path": "data/L1_C1_Z5p0um_600uA_0p1PR_MF_B.csv",
+          "sha256": "d74f7e15bfb6911dc7c78ace4cb3bd49f9a5aec68fccc573e473d540bafc78e8"
+        },
+        {
+          "path": "data/L1_C1_Z6p0um_600uA_0p1PR_MF_B.csv",
+          "sha256": "4256a4466990d4f18400a17b16d149513e3b6e890f501f677e8c0f91adf26f7b"
+        },
+        {
+          "path": "data/L1_C1_Z7p0um_600uA_0p1PR_MF_B.csv",
+          "sha256": "61522e51c938aa0d60b15327482ddacd33bb031e62848bd9b3dd3cf729a7cdca"
+        },
+        {
+          "path": "data/L1_C1_Z8p0um_600uA_0p1PR_MF_B.csv",
+          "sha256": "ccfb3dbb2f67c8805deaf90cbfe6613ca22e97b9326587411299fe3584521d51"
+        },
+        {
+          "path": "data/L1_C1_Z9p0um_600uA_0p1PR_MF_B.csv",
+          "sha256": "eb8139819b83177fd071380ac17c6a1476e6dd33548e481bf78be0c304ef226c"
+        },
+        {
+          "path": "data/L1_C1_Z10p0um_600uA_0p1PR_MF_B.csv",
+          "sha256": "e411bb2e73a4af52ef070be36ea2e6a4fb7050d7a6b0fb7f936b1dc96e4285b1"
+        }
+      ]
+    },
+    "IC_2um": {
+      "grid": {
+        "nx": 1400,
+        "ny": 1400,
+        "x0": -119.95,
+        "y0": -74.94999999999999,
+        "dx": 0.10000000000000853,
+        "dy": 0.09999999999999432
+      },
+      "heights_um": [
+        1.0,
+        2.0
+      ],
+      "sources": [
+        {
+          "path": "data/data2/IC_2um_Z1p0um_600uA_0p1PR__MF.csv",
+          "sha256": "fdb0070bf0ca8db703749deca1bd2655636f432e18bee562216dffe17bb69e80"
+        },
+        {
+          "path": "data/data2/IC_2um_Z2p0um_600uA_0p1PR__MF.csv",
+          "sha256": "b10efb35513d8d0c0a928cb5ba007d69a8cfe369ea0d35f24fee35d2fa3f8cb9"
+        }
+      ]
+    },
+    "IC_4um": {
+      "grid": {
+        "nx": 1400,
+        "ny": 1400,
+        "x0": -119.95,
+        "y0": -74.95,
+        "dx": 0.10000000000000853,
+        "dy": 0.09999999999999432
+      },
+      "heights_um": [
+        0.5,
+        3.0,
+        4.0,
+        5.0,
+        6.0,
+        7.0,
+        10.0
+      ],
+      "sources": [
+        {
+          "path": "data/data2/IC_4um_Z0p5um_600uA_0p1PR__MF.csv",
+          "sha256": "ff328ccbdbee178f7b96807148a4a97843ac9e156d69351ef372b18aac329355"
+        },
+        {
+          "path": "data/data2/IC_4um_Z3p0um_600uA_0p1PR__MF.csv",
+          "sha256": "05f651598ed447d09ef0d5e67b4087570a292e8ca2360cb65f7e0042eed1e17f"
+        },
+        {
+          "path": "data/data2/IC_4um_Z4p0um_600uA_0p1PR__MF.csv",
+          "sha256": "d6fe8fb01f3dcb9d227d141081ab8cf0a75c8d69b8c4dec601d40284f58e0921"
+        },
+        {
+          "path": "data/data2/IC_4um_Z5p0um_600uA_0p1PR__MF.csv",
+          "sha256": "efab0e65ebc535544407da26d7289c296844a9bc6e380645fc08f1fa5d191527"
+        },
+        {
+          "path": "data/data2/IC_4um_Z6p0um_600uA_0p1PR__MF.csv",
+          "sha256": "4b30925d8e00acad669c712f6da9b79fe2fac185f971dd125a6d7126ed014742"
+        },
+        {
+          "path": "data/data2/IC_4um_Z7p0um_600uA_0p1PR__MF.csv",
+          "sha256": "b13d7edaed9fab01d7ce505bb3ec73c3e7b3fd0f14b354f8c1d8770ab72a2300"
+        },
+        {
+          "path": "data/data2/IC_4um_Z10p0um_600uA_0p1PR__MF.csv",
+          "sha256": "cfc2f66c0dc5e5c45bb7b0e887d4a8459427675f4d5a9fae62081b75771f1565"
+        }
+      ]
+    }
+  }
+}

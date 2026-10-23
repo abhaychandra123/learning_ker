@@ -30,8 +30,12 @@ plt.rcParams.update({"font.size": 9, "figure.dpi": 100, "savefig.dpi": 120})
 
 
 def sha256(path):
+    # Streaming keeps large CSVs out of memory and supports Python 3.10.
+    digest = hashlib.sha256()
     with Path(path).open("rb") as stream:
-        return hashlib.file_digest(stream, "sha256").hexdigest()
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def load_plane(path):

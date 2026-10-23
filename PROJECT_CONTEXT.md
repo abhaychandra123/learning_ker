@@ -1,5 +1,60 @@
 # Project context for a new coding chat
 
+## Combined-data extension (22 October 2026)
+
+The user requested local code preparation before transferring to Prajna; they
+will execute transfer/submission commands themselves. They explicitly selected
+**one shared ConvLISTA** trained across `data/` plus `data/data2/`. Reproducing the
+old single-pair Kaggle experiment is deferred.
+
+Later on 22 October, the user switched the execution target to their professor's
+server, `abhaychandra@10.129.6.189` (`user-ESC4000A-E10`, RTX A6000 48 GB,
+driver 590.48.01, system Python 3.10.12). No scheduler executable was visible.
+`hpc/run_combined_direct.sh` now launches the same experiment without Slurm;
+`hpc/check_cuda.py --allow-direct` explicitly permits its GPU check on this server.
+The user will perform the transfer/environment setup/run commands themselves.
+They prefer the server's Python 3.10 with standard `venv` over Miniforge.
+The SHA-256 helper in `scripts/kernel_crops.py` now uses compatible streaming
+hashing instead of the Python 3.11-only `hashlib.file_digest`; sync this file to
+the server before running. Numerical behavior and digest values are unchanged.
+The new server's project environment and actual GPU calculation are not yet
+verified. Prajna's Python 3.11 environment and torch 2.6.0+cu124 imports succeeded,
+but its GPU test was queued, and a second submission hit AssocGrpSubmitJobsLimit;
+no successful GPU-check output has been supplied. Do not infer its final job state.
+
+Read [README_COMBINED_EXPERIMENT.md](README_COMBINED_EXPERIMENT.md) for the detailed
+old/new comparison, scientific scope, commands, validation and blank results
+tables to populate after the HPC run. New entry points are
+`scripts/combined_data.py`, `scripts/combined_lista.py`,
+`scripts/compare_combined.py`, `scripts/plot_combined.py`, and
+`hpc/combined.sbatch` / `hpc/check_cuda.py`. The original pipeline is unchanged.
+
+The new converter keeps geometry-specific float32 **µT** `[3,y,x]` caches in a
+fresh output directory, never the primary tesla cache. Default pairing uses the
+lowest plane per geometry: 10 L1_C1 pairs anchored at 0.5 µm, six IC_4um pairs
+anchored at 0.5 µm, and IC_2um 2→1 µm. All 20 real CSVs were converted, coordinate
+alignment checked, and output hashes verified: 17 height pairs / 51 signed
+component pairs. `hpc/combined_dataset_inventory.json` records the raw-file audit.
+
+One shared set of 163 parameters uses the appropriate frozen operator per pair.
+The threshold coefficient is multiplied by each operator's step, preserving
+ISTA initialization across different operator bounds. A global training-only
+scale and streamed full-image batches accumulate gradients for one optimizer
+update per epoch. The default joint-kernel fit and model selection use all pairs
+as same-sample training reconstructions. Optional geometry holdouts require
+analytic operators; reference-fitted joint operators are rejected for holdouts.
+Epoch checkpoints include optimizer state and support strict data/code/config
+checked resume; only total epochs/locations may change. This new runner is
+single-GPU. The old ConvLISTA CLI's no-resume limitation still applies to it.
+
+Validation: 63 repository tests ran on CPU, 62 passed and one existing two-GPU
+test skipped; all seven new tests passed. Separate synthetic holdout and
+nonconvergence-status integrations passed. Shell syntax, Python compilation,
+and generated-report visual QA passed. No full-resolution combined training or
+HPC execution was performed; new scientific scores are not yet available.
+
+---
+
 Last checked: 29 September 2026 against base revision `da5a140` plus the working-tree epsilon-stopping changes. This is the short entry point; read the relevant implementation before editing. Update this file when the experiment, interfaces, or results change.
 
 ## What we are trying to do
@@ -116,3 +171,39 @@ This file supplies orientation; a chat still needs repository access (or the rel
 Standalone FISTA visual reports: `scripts/fista_report.py` renders saved runs; `fista.py` calls it automatically or via `--replot --output <existing-run>`. `runs/fista_z3/index.html` contains the user's completed z=3 reconstruction (Bx/By/Bz: 346/356/330 converged updates), kernel/input/forward/profile/spectrum plots, and a separate forward height holdout fitted only on .5→1 and predicting z=2 via three padded steps. This holdout does not establish inverse reconstruction generalization. `report_metrics.json` and `report_provenance.json` document the added diagnostics; original solver arrays/metrics are retained. Cache hashes are checked before pairing existing reconstructions with source fields.
 
 Patch-based lambda selection: `scripts/select_lambda.py` implements the professor's manual homogeneous-region variance estimate (`ddof=1`) and Morozov full-image squared-residual target. See `LAMBDA_SELECTION.md` for interactive rectangle selection, coordinate/reused-ROI modes, FISTA/ISTA search, separate solver/discrepancy tolerances, tighter-solver verification, outputs and assumptions. It is a primary-cache, one-component-at-a-time, same-sample kernel experiment. No scientific λ has been selected yet: the user must choose a representative patch. Numerical estimator/search tests and a complete synthetic CLI/report run validate implementation; interactive window selection has not been manually exercised.
+
+## ALISTA implementation (2026-10-15)
+
+See `ALISTA.md` for the mathematical contract, sources, commands, and scope.
+`scripts/alista_weights.py` solves the paper's Eq. (16) using projected gradient
+descent (Appendix E.1), with an independent SVD option and explicit feasibility /
+stationarity diagnostics. `scripts/alista.py` implements Eq. (15): frozen D and W,
+zero initial coefficients, and one learned step and threshold per layer (32
+scalars at 16 layers). Optional support selection follows the authors' released
+schedule. The learned-ISTA mode uses W=D as an explicitly named control.
+
+`alista_data.py`, `alista_experiment.py`, `train_alista.py`, and
+`compare_alista.py` separate data generation, metrics/baselines, training, and
+evaluation. Training uses fresh Bernoulli-Gaussian examples and fixed validation
+data. Testing uses an independent stream; baseline lambda selection uses only
+validation. Checkpoints, source hashes, analytic diagnostics, scalar training
+logs, predictions, CSVs and plots are saved. Each command refuses existing output.
+
+This implements the **dense sparse-code experiment**, not a full-resolution QDM
+ALISTA model. The magnetic crop/pad operator is unchanged. A justified sparse
+representation and tractable analytic operator respecting those boundaries are
+still needed before a QDM comparison. Do not call the existing adjoint alone an
+ALISTA analytic weight, compare sparse-code NMSE directly to QDM range NRMSE, or
+claim the paper's numerical results have been reproduced. Conv-ALISTA,
+Robust-ALISTA and HyperLISTA remain separate future work.
+
+Validation completed on CPU: 56 tests run, 55 passed, one existing two-GPU test
+skipped; all 22 new ALISTA tests passed. The bounded Section 5.1 experiment is
+under `runs/alista_validation/`: 250-by-500 D, 16 layers, seed 0, noiseless,
+200 updates per stage and 1,000 independent test examples. Final results are in
+`comparison_verified/metrics.json`: plain ALISTA -28.0063 dB, support-selection
+ALISTA -54.6781 dB, learned-ISTA control -12.1351 dB, ISTA16 -6.2607 dB,
+FISTA16 -10.9823 dB, ISTA500 -22.2125 dB, FISTA500 -55.3376 dB. Baseline
+lambdas were selected on validation only. These are single-seed synthetic
+results, not QDM scores or replicated paper tables. `ALISTA.md` records training
+protocol differences and the final legacy-percentile edge-case verification.

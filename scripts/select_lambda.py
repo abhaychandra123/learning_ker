@@ -163,7 +163,7 @@ def main():
     group.add_argument('--roi-from', type=Path, help='reuse coordinates from a saved noise.json, recomputing variance')
     parser.add_argument('--estimate-only', action='store_true', help='save patch/noise diagnostics without a lambda search')
     parser.add_argument('--solver', choices=('ista','fista'), default='fista')
-    parser.add_argument('--epsilon', type=float, default=1e-3)
+    parser.add_argument('--epsilon', type=float, default=1e-4)
     parser.add_argument('--discrepancy-tolerance', type=float, default=.05, help='relative tolerance on squared residual (default 5%%)')
     parser.add_argument('--pad', type=int, default=32)
     parser.add_argument('--output', type=Path, required=True)
