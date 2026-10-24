@@ -77,8 +77,8 @@ command never silently substitutes an untrained model or different operator.
 | File | Contents |
 |---|---|
 | `index.html` | Clickable report with metrics and full-size figures |
-| `figures/Bx.png`, `By.png`, `Bz.png` | Reference, blurred input, reconstruction and signed error |
-| `figures/*_baselines.png` | Optional saved classical comparison panels |
+| `figures/*_independent.png`, `*_shared.png` | Reference, blurred input, reconstruction and signed error, with labelled display scales |
+| `figures/*_baselines_*.png` | Optional saved classical comparison panels |
 | `reconstruction_uT.npy` | Float32 `[selected_components, ny, nx]` reconstruction in µT |
 | `fields_uT.npz` | Input, reconstruction, optional reference and classical arrays |
 | `metrics.csv`, `metrics.json` | Per-component RMSE, range NRMSE, optional baseline stopping metadata |
@@ -86,8 +86,20 @@ command never silently substitutes an untrained model or different operator.
 | `status.json` | Report completion/failure and count of nonconverged baseline rows |
 
 Components appear in Bx/By/Bz order for `all`, or the single requested component.
-Figures share a colour scale across field maps; signed residuals have a separate
-labelled scale. Metrics use full-resolution arrays and physical µT:
+The default `--color-scale both` shows individually scaled fields, each with its
+own µT colourbar, followed by an expandable shared-scale view for amplitude
+comparison. Use `--color-scale independent` or `--color-scale shared` for only
+one view. Limits are symmetric about zero using each field's maximum absolute
+value; no percentile clipping is applied. Signed residuals always have their
+own scale. Colours in independently scaled panels cannot be compared as equal
+amplitudes. Display scaling never alters arrays or metrics.
+
+The last panel is **reconstruction minus reference**, not another reconstructed
+image. Sharp structures remaining in that error map indicate missed features.
+`plot_diagnostics.json` and the HTML report additionally show field min/max and
+relative L2 error, `100 * norm(prediction-reference) / norm(reference)`, undefined
+for zero-energy or absent references. Range NRMSE is not a percentage accuracy.
+Metrics use full-resolution arrays and physical µT:
 
 ```text
 RMSE = sqrt(mean((reconstruction − reference)²))
@@ -100,6 +112,16 @@ slightly from the original GPU CSV due to float64 CPU metric accumulation.
 Fresh inference seconds are synchronized individual forward-call measurements,
 not the original warmed three-repeat benchmark. Reused predictions have no
 new inference time.
+
+Redraw a completed report without PyTorch, a checkpoint or fresh inference:
+
+```bash
+python3 scripts/reconstruct_combined.py \
+  --replot runs/reconstruction_local_10um --color-scale both
+```
+
+This updates figures, HTML, `plot_settings.json` and `plot_diagnostics.json` in
+place. Original arrays, metrics, status and inference provenance are retained.
 
 The model **does not generate ground truth**. For an existing COMSOL pair the
 actual lower-height reference is loaded from the archive. These remain

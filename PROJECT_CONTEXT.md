@@ -274,3 +274,17 @@ within 0.0001 percentage points. Three new tests passed; one actual PyTorch
 checkpoint/normalization test was skipped because local Python has no torch.
 Fresh inference/GPU execution remains to be checked by the user on the training
 machine. No remote commands or retraining were performed.
+
+On 2026-10-24, reconstruction reports gained `--color-scale independent|shared|both`
+(default both, independent panels first) and `--replot <completed-output>`.
+Replot updates only figures/HTML/display diagnostics, retaining numerical arrays,
+metrics, inference provenance and status. Each independent map has its own µT
+colourbar; shared views remain expandable. The final panel is signed LISTA-minus-
+reference error. `plot_diagnostics.json` adds physical min/max and relative L2
+error to explain limitations of full-field range NRMSE. The user's fresh local
+output `runs/reconstruction_local_10um` was redrawn without inference. Its L1_C1
+Bx 10→0.5 result has range NRMSE 4.273% but relative L2 error about 90.619%; field
+range is about -39.65 to +36.06 µT versus reference -186.43 to +187.39 µT. This is
+poor fine-detail/amplitude recovery, not merely a colour-scale issue. Three CLI
+tests still pass, one torch test skipped in the agent's Python; output figures
+were visually checked. Preserve unrelated existing repository changes.

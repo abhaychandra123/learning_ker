@@ -117,11 +117,22 @@ def infer(run, setup, observed, transfer, pad, device):
                                     best_epoch=saved['best_epoch'], scale_uT=scale)
 
 
-def render(output, arrays, components, grid, rows, provenance):
+def render(output, arrays, components, grid, rows, provenance, color_scale='both'):
+    if color_scale == 'both':
+        render(output, arrays, components, grid, rows, provenance, 'shared')
+        render(output, arrays, components, grid, rows, provenance, 'independent')
+        page = output/'index.html'
+        shared = ''.join(f'<a href="figures/{c}{suffix}_shared.png"><img loading="lazy" '
+                         f'src="figures/{c}{suffix}_shared.png"></a>'
+                         for c in components for suffix in (('', '_baselines') if any(n in arrays for n in BASELINES) else ('',)))
+        page.write_text(page.read_text()+'<details><summary>Show shared scales for amplitude comparison</summary>'
+                       +shared+'</details>')
+        write_json(output/'plot_settings.json', dict(color_scale='both', primary='independent'))
+        return
     import matplotlib
     matplotlib.use('Agg')
     import matplotlib.pyplot as plt
-    figures = output/'figures'; figures.mkdir()
+    figures = output/'figures'; figures.mkdir(exist_ok=True)
     gallery = []
     extent = [grid['x0']-grid['dx']/2, grid['x0']+(grid['nx']-.5)*grid['dx'],
               grid['y0']-grid['dy']/2, grid['y0']+(grid['ny']-.5)*grid['dy']]
@@ -142,9 +153,13 @@ def render(output, arrays, components, grid, rows, provenance):
         axes = axes[0]
         limit = max(float(np.abs(arrays[n][c]).max()) for n in names) or 1.
         for ax, name in zip(axes, names):
-            im = ax.imshow(arrays[name][c], origin='lower', extent=extent, cmap='RdBu_r', vmin=-limit, vmax=limit)
+            bound = (float(np.abs(arrays[name][c]).max()) or 1.) if color_scale == 'independent' else limit
+            im = ax.imshow(arrays[name][c], origin='lower', extent=extent, cmap='RdBu_r', vmin=-bound, vmax=bound)
             ax.set_title(title(name, component))
-        fig.colorbar(im, ax=list(axes[:len(names)]), label=f'{component} (µT)', shrink=.8)
+            if color_scale == 'independent':
+                fig.colorbar(im, ax=ax, label=f'{component} (µT)', shrink=.8)
+        if color_scale == 'shared':
+            fig.colorbar(im, ax=list(axes[:len(names)]), label=f'{component} (µT)', shrink=.8)
         if with_ref:
             residual = arrays['lista'][c].astype(np.float64)-arrays['reference'][c]
             bound = float(np.abs(residual).max()) or 1.
@@ -153,19 +168,34 @@ def render(output, arrays, components, grid, rows, provenance):
             fig.colorbar(im, ax=axes[-1], label='Error (µT)', shrink=.8)
         for ax in axes: ax.set_xlabel('x (µm)'); ax.set_ylabel('y (µm)')
         fig.suptitle(f'{provenance["geometry"]}, {component}: {provenance["standoff_um"]:g} → '
-                     f'{provenance["target_standoff_um"]:g} µm — {provenance["mode"]}')
-        name = f'{component}.png'; fig.savefig(figures/name, dpi=140); plt.close(fig); gallery.append(name)
+                     f'{provenance["target_standoff_um"]:g} µm — {provenance["mode"]}\n'
+                     f'{color_scale.capitalize()} field scales; last panel is signed reconstruction error')
+        name = f'{component}_{color_scale}.png'; fig.savefig(figures/name, dpi=140); plt.close(fig); gallery.append(name)
         baselines = [n for n in BASELINES if n in arrays]
         if baselines:
             names = ['reference', 'lista']+baselines
             fig, axes = plt.subplots(2, 3, figsize=(16, 11), constrained_layout=True)
             bound = max(float(np.abs(arrays[n][c]).max()) for n in names) or 1.
             for ax, n in zip(axes.flat, names):
-                im = ax.imshow(arrays[n][c], origin='lower', extent=extent, cmap='RdBu_r', vmin=-bound, vmax=bound)
+                limit = (float(np.abs(arrays[n][c]).max()) or 1.) if color_scale == 'independent' else bound
+                im = ax.imshow(arrays[n][c], origin='lower', extent=extent, cmap='RdBu_r', vmin=-limit, vmax=limit)
                 ax.set_title(title(n, component)); ax.set_xlabel('x (µm)'); ax.set_ylabel('y (µm)')
-            fig.colorbar(im, ax=list(axes.flat), label=f'{component} (µT)', shrink=.8)
-            fig.suptitle(f'{component}: saved classical baselines; no classical solver rerun')
-            name = f'{component}_baselines.png'; fig.savefig(figures/name, dpi=140); plt.close(fig); gallery.append(name)
+                if color_scale == 'independent': fig.colorbar(im, ax=ax, label=f'{component} (µT)', shrink=.8)
+            if color_scale == 'shared': fig.colorbar(im, ax=list(axes.flat), label=f'{component} (µT)', shrink=.8)
+            fig.suptitle(f'{component}: saved classical baselines; {color_scale} scales; no classical solver rerun')
+            name = f'{component}_baselines_{color_scale}.png'; fig.savefig(figures/name, dpi=140); plt.close(fig); gallery.append(name)
+    diagnostics = []
+    for c, component in enumerate(components):
+        truth = arrays['reference'][c].astype(np.float64) if 'reference' in arrays else None
+        norm = np.linalg.norm(truth) if truth is not None else 0.
+        for method, a in arrays.items():
+            field = a[c].astype(np.float64)
+            diagnostics.append(dict(component=component, method=method, min_uT=float(field.min()),
+                                    max_uT=float(field.max()), relative_l2_error_percent=
+                                    float(100*np.linalg.norm(field-truth)/norm) if norm else None))
+    write_json(output/'plot_diagnostics.json', dict(definition='relative L2 error (%) = 100 * norm(pred-reference) / norm(reference)', rows=diagnostics))
+    diagnostic_table = ''.join('<tr>'+''.join(f'<td>{html.escape(str(r[k]) if r[k] is not None else "unavailable")}</td>'
+                               for k in ('component','method','min_uT','max_uT','relative_l2_error_percent'))+'</tr>' for r in diagnostics)
     body = ''.join(f'<a href="figures/{name}"><img src="figures/{name}" loading="lazy"></a>' for name in gallery)
     table = ''.join('<tr>'+''.join(f'<td>{html.escape(str(r[k]) if r[k] is not None else "unavailable")}</td>'
                                 for k in ('component','method','rmse_uT','range_nrmse_percent','converged','stop_reason'))+'</tr>' for r in rows)
@@ -175,11 +205,32 @@ def render(output, arrays, components, grid, rows, provenance):
         '<h1>ConvLISTA reconstruction</h1><p>'+html.escape(provenance['interpretation'])+'</p>'
         '<p>Fields are in µT. NRMSE (%) = 100 × RMSE / reference max–min range. '
         'Undefined for a constant or absent reference. Reference fields are loaded, never generated by the model. '
-        'Maps share a scale within a comparison; residuals have their own scale.</p>'
+        f'Current view: <strong>{color_scale} field scales</strong>; residuals have their own scale. '
+        'Independent scales reveal structure but equal colours do not mean equal amplitudes across panels. '
+        'Colour scaling does not change any reconstruction or error metric. The last panel is reconstruction minus reference, '
+        'not another reconstruction. Positive/negative errors appear red/blue.</p>'
         '<p><a href="metrics.csv">Metrics CSV</a> · <a href="provenance.json">Run details</a> · '
         '<a href="reconstruction_uT.npy">Reconstruction array</a></p>'
         '<table><tr><th>Component</th><th>Method</th><th>RMSE µT</th><th>Range NRMSE %</th>'
-        '<th>Converged</th><th>Stop reason</th></tr>'+table+'</table>'+body)
+        '<th>Converged</th><th>Stop reason</th></tr>'+table+'</table>'
+        '<h2>Amplitude and relative error</h2><p>Relative L2 error = 100 × ||prediction − reference|| / ||reference||. '
+        'This uses reference energy rather than its max–min range. A small range NRMSE is not a percentage accuracy score.</p>'
+        '<table><tr><th>Component</th><th>Field</th><th>Min µT</th><th>Max µT</th><th>Relative L2 error %</th></tr>'
+        +diagnostic_table+'</table>'+body)
+    write_json(output/'plot_settings.json', dict(color_scale=color_scale))
+
+
+def replot(output, color_scale):
+    """Redraw a completed output without touching arrays, scores or inference provenance."""
+    output = output.resolve()
+    if json.loads((output/'status.json').read_text())['status'] != 'complete':
+        raise ValueError('Replot requires a completed reconstruction report')
+    provenance = json.loads((output/'provenance.json').read_text())
+    rows = json.loads((output/'metrics.json').read_text())['rows']
+    with np.load(output/'fields_uT.npz', allow_pickle=False) as saved:
+        arrays = {n:saved[n] for n in saved.files}
+    render(output, arrays, provenance['components'], provenance['grid'], rows, provenance, color_scale)
+    print(f'Redrawn without inference: {output / "index.html"}')
 
 
 def run(args):
@@ -285,7 +336,7 @@ def run(args):
             writer = csv.DictWriter(stream, fieldnames=list(rows[0])); writer.writeheader(); writer.writerows(rows)
         write_json(output/'metrics.json', dict(definition='100 * RMSE / (max(reference)-min(reference)); full-resolution per-component', rows=rows))
         write_json(output/'provenance.json', provenance)
-        render(output, arrays, components, grid, rows, provenance)
+        render(output, arrays, components, grid, rows, provenance, args.color_scale)
         write_json(output/'status.json', dict(status='complete', mode=provenance['mode'],
                    baseline_nonconverged_rows=sum(r['converged'] is False for r in rows)))
         print(f'Report: {output / "index.html"}', flush=True)
@@ -311,7 +362,16 @@ def main(argv=None):
     p.add_argument('--include-saved-baselines', action='store_true', help='Compare against original saved ISTA/FISTA predictions')
     p.add_argument('--list', action='store_true', help='List available COMSOL height pairs')
     p.add_argument('--output', type=Path)
-    run(p.parse_args(argv))
+    p.add_argument('--color-scale', choices=('shared','independent','both'), default='both',
+                   help='Display scales only; default shows individual colorbars and an expandable shared-scale view')
+    p.add_argument('--replot', type=Path, help='Redraw an existing completed output without inference')
+    args = p.parse_args(argv)
+    if args.replot:
+        if args.output or args.input or args.reference or args.geometry or args.standoff is not None or args.list or args.saved_results or args.include_saved_baselines or args.target_standoff is not None:
+            p.error('--replot takes an existing output directory; do not combine with reconstruction-selection flags')
+        replot(args.replot, args.color_scale)
+    else:
+        run(args)
 
 
 if __name__ == '__main__':
