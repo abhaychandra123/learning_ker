@@ -1,5 +1,12 @@
 # Synthetic magnetic-field dataset — version 1
 
+**Training integration added 25 October 2026:** see
+[README_SYNTHETIC_EXPERIMENT.md](README_SYNTHETIC_EXPERIMENT.md) for the new
+`train_synthetic.py` entry point, 51-versus-1,080 controlled augmentation
+experiment, validation evidence and remote launch commands. The generation
+pipeline described below still only prepares data; the original
+`compare_combined.py` still expects the original COMSOL manifest format.
+
 This pipeline uses the lowest available COMSOL field from each geometry to generate additional paired inputs for magnetic-field reconstruction. It implements analytical upward propagation, physical quarter-turn rotations and reproducible Gaussian noise. It prepares data; it does **not** run a new LISTA/ISTA/FISTA experiment.
 
 ## What was generated locally

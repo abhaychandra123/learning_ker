@@ -1,5 +1,42 @@
 # Reconstruct a selected standoff with the trained model
 
+## New synthetic-trained model and ISTA/FISTA comparison
+
+The completed 1,080-pair model uses `scripts/reconstruct_synthetic.py`, which
+reuses `reconstruct_combined.py`'s report renderer but loads the new `final.pt`,
+saved normalization and analytical pad-256 operator. The historical inference
+entry point below loads `best.pt` and fitted operators from the old run.
+
+On the Mac, `bash hpc/reconstruct_synthetic_local.sh` fetches the new checkpoint
+if missing, verifies its SHA256, reconstructs L1_C1 **10 → 0.5 µm** for Bx/By/Bz
+on CPU, includes saved classical baselines, and opens the report. It uses
+`/tmp/qdm-synthetic-torch-env/bin/python`; set `QDM_PYTHON` if using another
+environment with torch, NumPy and Matplotlib. Existing outputs are refused.
+
+The existing local report is `runs/reconstruction_synthetic_L1_C1_10um/index.html`.
+To add or redraw the saved ISTA/FISTA comparisons without repeating inference:
+
+```bash
+/tmp/qdm-synthetic-torch-env/bin/python scripts/reconstruct_synthetic.py \
+  --replot runs/reconstruction_synthetic_L1_C1_10um --include-saved-baselines
+```
+
+This shows reference, new ConvLISTA, ISTA-16, FISTA-16, ISTA-to-epsilon and
+FISTA-to-epsilon with independent and shared color scales. Input/reference
+identity and archive hashes are checked before attaching baselines; their
+iteration counts and convergence flags are retained. The new reconstruction
+array and inference provenance remain unchanged, with baseline provenance added.
+The saved baselines use the **historical joint-fitted operator, pad 32**, whereas
+the new model uses **analytical pad 256**. Figures and HTML label this as a
+contextual comparison, not a matched-operator solver benchmark. No classical
+solver is rerun. Future fresh inference also accepts `--include-saved-baselines`.
+
+Seven reconstruction tests passed locally, including exact agreement with the
+synthetic experiment evaluator on small fixtures, rejection of changed inputs,
+and preservation of reconstruction arrays and nonconvergence metadata on replot.
+
+## Historical model entry point
+
 `scripts/reconstruct_combined.py` is the reusable inference/report command. It
 does not train a model. Change the command-line flags to select geometry, input
 standoff, target standoff and component.

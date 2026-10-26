@@ -288,3 +288,188 @@ range is about -39.65 to +36.06 µT versus reference -186.43 to +187.39 µT. Thi
 poor fine-detail/amplitude recovery, not merely a colour-scale issue. Three CLI
 tests still pass, one torch test skipped in the agent's Python; output figures
 were visually checked. Preserve unrelated existing repository changes.
+
+## Synthetic augmentation training integration (2026-10-25, India time)
+
+`README_SYNTHETIC_EXPERIMENT.md` tracks the hypothesis that increased synthetic
+coverage improves actual COMSOL reconstruction. `train_synthetic.py` connects
+`SyntheticDataset` to the existing `SharedConvLISTA` and `PaddedFFT`, with
+rotation-aware analytical operators, manifest padding, global normalization,
+one-component streaming, and one accumulated Adam update per epoch. Original
+model/solver/trainer files and datasets are unchanged. Epoch-boundary resume
+checks data/code/config hashes; primary evaluation uses the final checkpoint,
+not one selected on actual COMSOL scores.
+
+The default paired experiment trains fresh seed-0 models for 200 updates:
+51 synthetic components matching original heights (no rotation/noise), versus
+all 1,080 synthetic components. Both use analytical pad-256 physics, the same
+215.14413452148438 µT scale, 16 layers, 9x9 kernels, lr=1e-4 and lambda=1e-4.
+Both evaluate the same 51 actual COMSOL components only after training.
+`synthetic_experiment.py` validates selection and archive/reference identity;
+`compare_synthetic_experiment.py` produces paired/per-geometry error deltas.
+`hpc/run_synthetic_experiment.sh` checks CUDA/tests, runs the augmented arm then
+control sequentially and writes the comparison. Historical fitted-pad-32
+results are contextual only. New actual evaluations share geometries/targets
+with training and cannot establish unseen-geometry generalization or prove
+that limited data was the only failure cause. Augmentation also changes noise,
+height, rotation and geometry weighting. No calibrated confidence is claimed.
+
+Local verification: all 17 actual archives checked; references exactly match;
+control=51, full=1080. All 14 synthetic dataset/training tests passed on CPU in
+an isolated cached-wheel PyTorch 2.14.1 / Python 3.13 environment, including
+rotated rectangular-grid physics, exact resume equivalence and unchanged
+training weights when actual evaluation inputs change. Shell syntax and Python
+compilation passed. Tiny training fixtures are not a full-size GPU run. SSH to
+10.129.6.189 was blocked by the execution environment, so no remote dataset,
+training launch, PID or result had been confirmed at implementation time. README
+contains exact copy, launch, monitoring and resume commands.
+
+Subsequent user-provided terminal output confirms successful remote inspection
+on `10.129.6.189`: 3 geometries, 360 vector / 1,080 scalar pairs, all training.
+The user launched `hpc/launch_synthetic_remote.sh`; background launcher PID is
+66593 and log is `~/learning_ker/logs/synthetic_data_hypothesis_v1.launch.log`.
+Later user logs confirm epoch 6 completed (MSE 0.0033977439, elapsed 8721.7 s)
+and epoch 7 reached 780/1080 gradient components by roughly 540 s. Full loss
+evaluation took 619.4 s. Projected unchanged runtime is about 22.8 min/epoch,
+76 hours for 200 epochs excluding control/final evaluation. User's NVIDIA
+snapshot shows RTX A6000, training Python PID 66663, 776 MiB process VRAM and
+0% sampled GPU utilization. This suggests loader stalls but is not sustained
+utilization or peak VRAM evidence. Local trace confirmed nine CPU propagations
+for three unique inputs across three noise recipes: the one-entry cache evicts
+components between recipes. Also every epoch repeats all 1080 samples for loss
+measurement and uses gradient checkpointing. No training source/contract was
+changed during diagnosis. See README runtime investigation; optimize caching,
+prefetch/evaluation cadence before blaming GPU capacity. Minibatch updates
+would be a separate protocol change. Hypothesis outcome remains pending.
+
+## Full-field training optimization and crop audit (2026-10-25)
+
+User authorized optimizing the running synthetic experiment and asked about
+cropping. `README_SYNTHETIC_OPTIMIZATION.md` records the implemented new path;
+legacy Python sources remain unchanged to preserve checkpoint hash validation.
+`synthetic_fast.py` builds fixed normalized inputs once with a 3-component
+clean-propagation cache, shares rotated targets, caches on CUDA when budget
+permits (about 8.75 GB inputs+targets), or uses pinned CPU cache/prefetch. It
+batches consecutive identical operators, uses real analytical FFTs with the
+same full image/padding, and benchmarks batch 1/2/4/8 and checkpoint on/off on
+CUDA after cache allocation. Batch losses retain per-component weights and
+one Adam update per full epoch. Precision remains float32 with no AMP/TF32.
+
+`train_synthetic_fast.py` measures post-update loss every 5 epochs and at final,
+logs pre-update loss each gradient pass, checkpoints each epoch, and supports
+SIGTERM stopping at an epoch boundary. `--migrate-from` only accepts audited
+legacy trainer/hash/data/settings, restores model+Adam+history and continues
+from the next epoch in a new directory. To keep arms comparable, the control
+replays K original scalar/full-FFT/checkpointed updates before adopting the
+same measured optimized settings, where K is the migrated epoch. Final actual
+COMSOL evaluation still uses the existing full-FFT evaluator. Rounding can
+differ from legacy arithmetic; numerical equivalence was tested, not bitwise
+identity between full and real FFTs.
+
+`hpc/optimize_synthetic_remote.sh USER@HOST` copies new files, runs new CPU tests
+on the server, then `switch_synthetic_run.py` validates source/data and exact
+launcher/trainer identities, stops only the old experiment, copies its latest
+completed checkpoint and starts `hpc/run_synthetic_fast.sh`. Only incomplete
+epoch work may be lost. Old outputs remain intact; new root is
+`runs/synthetic_data_hypothesis_fast_v2`. The helper refuses existing v2 output
+before copying files. It is NOT executed by this agent because remote SSH is
+blocked. At implementation time, no remote speedup or new GPU memory/epoch
+timing had been measured; subsequent user-provided measurements are below.
+
+ROI audit (`audit_synthetic_roi.py`, `runs/synthetic_roi_audit_v1`) finds 99%+
+per-component squared-field-energy reference boxes: IC_2um 1253x1315, IC_4um
+1236x1313, L1_C1 514x641. At highest propagated plane: 1285x1316, 1365x1374,
+844x860 respectively. A reference box +128px halo covers the full IC images;
+for L1_C1 it yields 768x771 and adds ~0.277/0.674/0.941% forward relative-L2
+error inside the reference ROI (Bx/By/Bz). Not an inverse-error guarantee.
+Keep current experiment full-field; any L1 crop study is separate and must
+check nonlocal/boundary effects. Cropping every geometry tightly is unsupported.
+
+Seven new optimization tests passed on CPU, including input identity, cache
+reuse, real/full FFT adjoints+gradients, batch weighting, migration with Adam,
+matched legacy prefix, sparse-evaluation weight invariance, exact optimized
+resume and rejection of invalid contracts. Full 1400x1400 CPU operator checks
+on all 9 geometry/components at high standoff/90-degree rotation showed maximum
+normalized real/full FFT difference <1.94e-7 and physical RMSE <4.26e-6 uT.
+At that validation stage, CUDA caching/prefetch/autotuning and actual optimized
+throughput were pending; subsequent remote measurements are below.
+
+Remote optimization switch update (user-provided terminal output): all seven
+optimization tests passed on the server in 2.871 s. The switch preserved the
+completed epoch-7 checkpoint and started optimized launcher PID 67736.
+Log: /home/abhaychandra/learning_ker/runs/synthetic_data_hypothesis_fast_v2/launch.log.
+At the switch, the next update was epoch 8, with epoch 200 still the final target.
+Do not rerun the migration/launch helper or infer a GPU benchmark result from
+the successful CPU tests and launcher PID alone.
+
+Remote performance update (25 October 2026, user-provided logs): cache build
+completed in 95.9 s; all eight CUDA batch/checkpoint trials accepted. Fastest
+candidate batch 8, activation checkpointing off: 5.3757 components/s and
+17,231,754,752 bytes peak allocated memory (~16.05 GiB), not total framebuffer
+usage or a full-epoch peak. Epochs 8, 9, 10 completed with gradient passes
+203.2 / 203.7 / 203.6 s (mean 203.5 s). Epoch-10 full loss evaluation took
+34.3 s; total epochs 203.3 / 203.7 / 237.9 s. Epoch 11 started. Epoch-10
+pre-update MSE 0.00345068960, post-update 0.00343422336. None on epochs 8/9
+means intentionally skipped post-update evaluation, not failed training.
+
+Presentation evidence is in README_SYNTHETIC_OPTIMIZATION.md: ~3.67x gradient
+speedup against the extrapolated 747.7 s legacy pass, ~18.06x full loss-pass
+speedup against measured 619.4 s. With evaluation every five updates, estimated
+average epoch is 203.5 + 34.3/5 = 210.36 s (3.51 min), ~6.50x faster than the
+projected legacy 1367.1 s (22.8 min). This combines implementation and evaluation
+cadence gains, not a measured full-run ratio or isolated per-change ablation.
+Same-cadence gradient+evaluation stage comparison implies ~5.75x. From epoch 10,
+190 remaining augmented updates +38 evaluations project ~11.1 h, excluding
+control/final actual evaluation and assuming unchanged throughput. Full images,
+all1080 pairs, model/Adam migration and one update/epoch preserved. Sustained
+GPU utilization, explicit cache placement and CPU fallback/prefetch remain
+unconfirmed by this excerpt. No reconstruction-quality improvement claim yet.
+
+## Completed synthetic experiment results (2026-10-25)
+
+Supersedes the pending-result status above. User supplied final remote
+comparison/results.json and summary.csv for synthetic_data_hypothesis_fast_v2;
+both arms completed 200 updates and actual-COMSOL evaluation. These are pasted
+remote results, not independently downloaded/verified remote artifacts.
+Control final training MSE 0.004416467621922493; logged cumulative training time
+2434.3 s and final actual evaluation 30.1 s. Cached control epochs ~9.7 s and
+loss passes ~1.6 s. These timing counters are not total experiment wall time.
+
+Across 51 evaluation components, control -> augmented means:
+NRMSE fraction 0.03740098333312365 -> 0.03711002305367689 (0.778% relative
+reduction, 0.029096 percentage points); relative L2 0.6506458469165415 ->
+0.6466198099165708 (0.619% relative reduction); RMSE 13.601660091477898 ->
+13.531605461164997 uT (0.515% relative reduction); amplitude slope
+0.6189114830874668 -> 0.5663313069944927 (farther from ideal 1).
+Only 16/51 component cases improve NRMSE; other 35 could include ties.
+IC_2um NRMSE improves 17.39%, 3/3 cases, slope moves toward1;
+IC_4um NRMSE worsens0.67%, 4/18 improve, slope moves farther below1;
+L1_C1 NRMSE improves0.21%, 9/30 improve, slope moves farther below1.
+Overall gain largely driven by one IC_2um vector case.
+
+Automatic directional rule passes, but aggregate gains <1%, mixed case outcomes
+and worse mean amplitude recovery do not establish substantial improvement or
+support data scarcity as sole cause. One seed, shared source geometries and
+changed augmentation/geometry weighting preclude broad causal/generalization
+claims. 21.18x recipes are not 21.18x independent geometries. No calibrated
+confidence. README_SYNTHETIC_EXPERIMENT.md now records final tables, interpretation
+and presentation wording; optimization README links the outcome separately
+from ~6.5x estimated compute speedup. Proposed next diagnostics: paired errors
+by height/component, matched-scale reconstructions and amplitude/residual checks,
+then targeted forward-mismatch/fit/augmentation-weighting tests. No new training
+or model changes performed for this result documentation.
+
+## Local synthetic reconstruction and classical report (2026-10-26)
+
+User ran the prepared hpc/reconstruct_synthetic_local.sh on Mac after the prior
+session disconnected. Local runs/reconstruction_synthetic_L1_C1_10um is complete:
+new augmented final checkpoint SHA256 bd8d704b5c1eda121f0dc2559c6805cd037e15fe68f167e29064bc04b7016eee,
+epoch200, CPU, L1_C1 10->0.5um all components, analytical pad256. Entry point
+scripts/reconstruct_synthetic.py reuses reconstruct_combined.render, not its
+legacy checkpoint loader. Initial report omitted saved ISTA/FISTA, prompting
+user correction. Added --include-saved-baselines and --replot to attach the
+historical ISTA/FISTA-16 and to-epsilon arrays with archive/input/grid checks,
+iteration/convergence metadata and explicit joint-pad32 versus analytic-pad256
+labels. Helper now includes baselines for future fresh reports. Replot preserves
+the new model's reconstruction_uT.npy and original inference details. Seven
+reconstruction tests passed. README_RECONSTRUCTION.md documents the new path.

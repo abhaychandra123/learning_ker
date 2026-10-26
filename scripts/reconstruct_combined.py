@@ -182,7 +182,11 @@ def render(output, arrays, components, grid, rows, provenance, color_scale='both
                 ax.set_title(title(n, component)); ax.set_xlabel('x (µm)'); ax.set_ylabel('y (µm)')
                 if color_scale == 'independent': fig.colorbar(im, ax=ax, label=f'{component} (µT)', shrink=.8)
             if color_scale == 'shared': fig.colorbar(im, ax=list(axes.flat), label=f'{component} (µT)', shrink=.8)
-            fig.suptitle(f'{component}: saved classical baselines; {color_scale} scales; no classical solver rerun')
+            baseline_note = provenance.get('baseline_note', '')
+            if baseline_note:
+                baseline_note = ('\n'+f"Historical ISTA/FISTA: {provenance['baselines']['operator']}, pad {provenance['baselines']['pad']}; "
+                                 f"new ConvLISTA: analytical, pad {provenance['operator']['pad']}. Different operator settings.")
+            fig.suptitle(f'{component}: saved classical baselines; {color_scale} scales; no classical solver rerun'+baseline_note)
             name = f'{component}_baselines_{color_scale}.png'; fig.savefig(figures/name, dpi=140); plt.close(fig); gallery.append(name)
     diagnostics = []
     for c, component in enumerate(components):
