@@ -21,6 +21,12 @@ launcher needs to be rerun.
 
 ## Final results: small aggregate gain, mixed reconstruction behavior
 
+Follow-up: [README_SYNTHETIC_DIAGNOSIS.md](README_SYNTHETIC_DIAGNOSIS.md) records
+new local full-resolution probes of clean-versus-actual inputs and matched
+analytical ISTA/FISTA. The model also struggles on clean high-standoff inputs;
+longer FISTA runs improve substantially. These selected Bz probes guide the
+next experiments and do not replace the full comparison reported here.
+
 Evidence: user-pasted remote JSON/CSV, not an independent download or local
 verification of the remote checkpoint hashes. Both arms used 200 Adam updates;
 the evaluation contains the same 17 vector / 51 component actual-COMSOL pairs.

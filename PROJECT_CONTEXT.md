@@ -473,3 +473,68 @@ iteration/convergence metadata and explicit joint-pad32 versus analytic-pad256
 labels. Helper now includes baselines for future fresh reports. Replot preserves
 the new model's reconstruction_uT.npy and original inference details. Seven
 reconstruction tests passed. README_RECONSTRUCTION.md documents the new path.
+
+## Read-only failure diagnosis (2026-10-26)
+
+User asked why augmentation helped so little and how to investigate. Ran new
+scripts/diagnose_synthetic_fit.py locally on completed augmented final model,
+five full-resolution Bz cases, both actual input and original NumPy analytical
+clean input. Results runs/synthetic_fit_diagnostic_v1/diagnostics.json; 36 rows,
+272.2 s; plot via scripts/plot_synthetic_fit_diagnostic.py. No new training.
+README_SYNTHETIC_DIAGNOSIS.md records evidence and ordered experiment plan.
+
+Trained relative L2 actual/clean: L1_C1 1um40.51/20.77%, 6um78.31/78.01%,
+10um95.28/94.98%; IC2 2um35.79/27.32%; IC4 10um87.20/87.01%.
+Forward discrepancy ||A(sharp)-actual||/||actual|| respectively16.56,16.46,
+39.47,19.35,36.39%. Thus forward mismatch is real but cannot alone explain
+clean high-standoff reconstruction failure. L1_C1 10um Bz same analytic pad256:
+initialISTA16 actual97.46% error, trained16 95.28%, FISTA16 96.42%, FISTA64
+89.05%, FISTA256 71.43%; clean equivalents97.21,94.98,96.12,88.57,70.54%.
+FISTA fixed budgets, NOT convergence claims; classical lambda1e-4uT, trained
+threshold learned~.00756uT. Avoid claiming identical regularization objectives.
+L1_C1 1um initialISTA error25.85%actual/14.62%clean, trained40.51/20.77%,
+so shared corrections hurt some easy cases. InitialISTA is NOT trainedcontrol.
+
+Only163 params/16 tied layers; each arm200 full-data optimizer steps. IC2's
+sample weighting changed5.88%->33.33%, L1 58.82%->33.33%; not data-count-only.
+Next priority: separate single-pair fitting/gradient diagnostics, then depth,
+parameter sharing/geometry weighting and forward-mismatch localization before
+more data. Clean-fit failures do not by themselves prove capacity vs optimizer.
+Local realFFT diagnostic Bz10 metric agrees with fullFFT local report to1.35e-10.
+
+## Authorized single-geometry capacity experiment (2026-10-26)
+
+User requested increasing parameters/layers and starting with one geometry.
+Prepared L1_C1 clean unrotated noise0 realization0 across absolute heights1..10um
+to0.5um:10vectors/30components, full1400square, analyticpad256, originalscale,
+200 full-data Adam updates initially per arm, seed0/lr1e-4/initiallambda1e-4,
+clip1 float32. Four arms tied16=163 params, tied32=163, untied16=2608,
+untied32=5216. Fresh initialization, no old checkpoint modifications. Tiedweights
+still shared across examples; untied has distinct two9x9kernels+threshold perlayer.
+
+New scripts geometry_lista.py, train_geometry_capacity.py,
+summarize_geometry_capacity.py; tests/test_geometry_capacity.py; wrappers
+hpc/run_geometry_capacity.sh and hpc/launch_geometry_capacity_remote.sh.
+README_GEOMETRY_CAPACITY.md includes protocol, commands, limits and resume.
+Launcher copies all Python sources into new remote experiments/geometry_capacity_v1,
+runs five tests, then sequential CUDA arms/autotuning1/2/3 plus checkpoint on/off.
+Existing remote sources/run outputs untouched. Outputs runs/geometry_capacity_v1,
+log logs/geometry_capacity_v1.launch.log. Strict checkpoint resume uses frozen
+sources. Every update logs gradient norm/clipping, parameter updateL2, threshold
+range/zeros; every20 clean perheight metrics; actualCOMSOL onlyafterfinal. Final
+actual arrays saved. Summary verifies same data/code/update budgets and cases.
+Model checkpoint loader is geometry_lista.load_model, not old shared-only loader.
+
+Five CPU tests passed: parametercounts/tied-vsuntied output+gradient equivalence,
+layer-bound checkpoint backward correctness, clean selection/exactmodelAdamresume,
+changedconfig rejection, actualinput isolation, four-arm summary/status checks.
+Shellsyntax/compilation/whitespace passed. Local frozen-source smoke at
+runs/geometry_capacity_smoke_v1/untied32_one_update completed: one clean1um pair,
+all3components, untied32, oneCPUupdate, noactualeval. Gradpass92.5s; traincounter
+197.9s includingdiagnostics; norm.00109538, updateL2.00715859; normalizedMSE
+.0001164050 -> .0001180913 (slightly worse, not evidenceofimprovement); all32
+thresholds projectedto0 firstupdate. This is executionvalidation, notformaltraining.
+
+Attempted SSH BatchMode to10.129.6.189 blocked Operationnotpermitted. No remote
+four-arm job launched/stopped. User must execute bash hpc/launch_geometry_capacity_remote.sh
+from Mac terminal forauthentication. Do not claim GPU runs started withoutlog.
