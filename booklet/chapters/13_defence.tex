@@ -1,0 +1,82 @@
+\chapter{Defending this work}\label{ch:defence}
+
+These are the questions most likely to come up, with honest answers.
+
+\section{About the source}
+
+\textbf{What is your network, and where does it come from?}\\
+Eq.~20 of Liu, Chen, Wang and Yin, ICLR 2019: convolutional LISTA. The extension to deblurring,
+$d_m=h*g_m$, is ours, and no published result covers it.
+
+\textbf{Is it ALISTA?}\\
+No. ALISTA computes its weights analytically. We learn ours. Eq.~26 was tried and dropped.
+
+\textbf{Which network do you recommend?}\\
+FISTA-Net run 2, from Xiang, Dong and Yang. It has the lowest simulated validation error among runs without our floor and loss
+changes, and it scores 33.3\% on COMSOL. Strict Eq.~20 at 33.8\% is effectively tied.
+
+\textbf{Which parts did you invent?}\\
+For strict runs: the blurred dictionary, the padding and mask, and the dictionary learning method. Chapter~\ref{ch:differences}
+lists all training details. The floor and the relative loss were additions, and strict runs removed them.
+
+\section{About the method}
+
+\textbf{Why not just use FISTA, since it wins?}\\
+On accuracy alone, you should. FISTA-300 scores 30.5\%, against 33.3\% for the selected network. Strict Eq.~20 wins at equal
+depth, 33.8 against 37.9\% at 64, but only on COMSOL, not on simulated validation. Run time has not been measured, so I
+cannot claim any network is faster.
+
+\textbf{Was FISTA tuned fairly?}\\
+Yes. Its $\lambda$ came from eight values on 16 simulated crops, and the best one lies inside the grid. COMSOL was not used. The
+search was widened after the network scores were known, and you should say so.
+
+\textbf{Did FISTA-Net fail?}\\
+Run 1 scored 39.4\%, but it was stopped early and its start values gave a gradient step 17 times weaker than the authors' code.
+Run 2 fixed both and scored 33.3\%, so the low score came from our setup. Chapter~\ref{ch:fistanet} has the numbers.
+
+\textbf{Is your network doing sparse coding?}\\
+Structurally yes. In behaviour, mostly no. Strict codes have high density, and some thresholds are zero, so it acts
+like a learned deconvolution.
+
+\textbf{Does the ALISTA convergence theorem apply?}\\
+No. It assumes much sparser codes than ours.
+
+\textbf{Why does $h$ stay fixed?}\\
+Because it is physics: upward continuation in a source-free region. We know it exactly, so learning it would only
+waste data. The empirical $k_0$ was removed because it breaks harmonicity.
+
+\section{About the data}
+
+\textbf{Why train on simulation?}\\
+Only 15 real pairs from two wire shapes exist, far too few for millions of parameters. Simulation derives all
+components from one current map, so it is physically consistent.
+
+\textbf{Is the test set really clean?}\\
+Models and checkpoints were chosen without COMSOL. But the generator's parameter ranges were designed from these coils,
+and we have now compared many methods on them. So it is clean of reconstruction scores, but not completely independent.
+
+\textbf{Why 33.8\% if the method is good? That sounds bad.}\\
+Because of how the score works. COMSOL's speckle sets a floor around 15--19\%, the blurry input itself is near 77\% on a
+signal-rich crop, and the Wiener filter gets 49.3\%.
+
+\section{About the results}
+
+\textbf{Why did simulated validation disagree with COMSOL?}\\
+The simulator differs from COMSOL, for example in its speckle and peaks, and the difference is not fully understood.
+The sparse variant won on simulation and lost on COMSOL, so simulated gains do not always transfer.
+
+\textbf{How confident are you in a one-point difference?}\\
+Not very. There is one seed per run, and no error bars.
+
+\section{What is not yet known}
+
+\begin{itemize}
+\item Where FISTA-Net would settle with a decaying learning rate, or more updates.
+\item How stable FISTA-Net's score is across seeds. Its validation error is still noisy.
+\item Whether the LFISTA-style network improves at $\lambda=0.009$, or with a higher limit on $\beta$.
+\item Actual run times. Without them, no speed claim is possible.
+\item Why strict Eq.~20's gain over FISTA at equal depth appears on COMSOL and not on simulated validation.
+\item Whether the early validation peak in MSE runs is overfitting or a loss mismatch.
+\item Why COMSOL decays faster than free-space physics.
+\item Whether results hold on a third wire shape.
+\end{itemize}

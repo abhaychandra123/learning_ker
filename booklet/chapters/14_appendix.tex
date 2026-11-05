@@ -1,0 +1,106 @@
+\chapter{Glossary}
+
+\begin{longtable}{>{\raggedright\arraybackslash}p{3.6cm}>{\raggedright\arraybackslash}p{11.4cm}}
+\toprule
+Term & Meaning \\
+\midrule
+\endhead
+Adjoint & The transpose of an operator. For a convolution it is the 180-degree rotated filter \\
+Atom & One small image in a dictionary, $g_m$ \\
+Checkpoint & A saved copy of a model. Also a separate memory trick in \code{torch.utils.checkpoint} \\
+Code & A map $x_m$ saying where and how strongly to stamp atom $m$ \\
+COMSOL & The finite-element simulation we use as test data \\
+Density & Fraction of code values that are not exactly zero \\
+Dictionary & The set of atoms \\
+Epoch & One pass over the training data. Here, 600 crops \\
+FISTA & ISTA plus momentum \\
+Ill-posed & A problem where the data alone does not fix the answer \\
+ISTA & Gradient step plus shrink, repeated \\
+Lasso & Least squares plus an $\ell_1$ penalty \\
+LISTA & ISTA unrolled into layers with learned weights \\
+Mask & An array of 0s and 1s that hides the padding \\
+NRMSE & Root mean square error divided by the target's range \\
+Plain & Eq.~20 with no threshold floor \\
+Relative $L_2$ & $\lVert y-t\rVert_2/\lVert t\rVert_2$, our main score \\
+Residual & The mismatch between predicted and measured data \\
+Shrink, soft threshold & Move a value toward zero by $\theta$, stopping at zero \\
+Sparse (run) & Eq.~20 with a floor on the thresholds, our addition \\
+Speckle & Fine mesh noise in COMSOL fields \\
+Standoff & Distance between source and sensor \\
+Strict & Plain Eq.~20 with MSE, at 32 and 64 layers \\
+Unrolling & Turning iterations into network layers \\
+Upward continuation & The exact law for how a field changes with height \\
+Wiener & $h/(h^2+\mu)$, a one-parameter deblurring filter \\
+\bottomrule
+\end{longtable}
+
+\chapter{Where everything is}
+
+\section*{Code}
+
+\begin{center}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+File & Contents \\
+\midrule
+\code{scripts/simulate_fields.py} & Data generator \\
+\code{scripts/plot_simulated.py} & Realism report \\
+\code{scripts/csc_lista.py} & Operator, ISTA, FISTA, dictionary learning, CSC-LISTA, Wiener \\
+\code{scripts/train_csc_lista.py} & Training and COMSOL scoring \\
+\code{scripts/fista_net.py} & FISTA-Net \\
+\code{scripts/train_fista_net.py} & FISTA-Net training \\
+\code{scripts/score_fista_depths.py} & FISTA at chosen depths, with a $\lambda$ search \\
+\code{tests/test_*.py} & 15 simulation, 15 CSC-LISTA and 8 FISTA-Net tests \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section*{Results on the server}
+
+Host \code{abhaychandra@10.129.6.189}, folder \code{~/learning_ker}.
+
+\begin{center}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+Folder & Contents \\
+\midrule
+\code{runs/simulated_3_to_05_v3} & Dataset \\
+\code{runs/csc_lista_v2/dictionary_strong} & Three dictionaries; $\lambda=0.3$ is used \\
+\code{runs/csc_lista_v2/full_plain} & Plain, 16 layers, with ISTA and FISTA baselines \\
+\code{runs/csc_lista_v2/full_sparse} & Sparse MSE, 16 layers \\
+\code{runs/csc_lista_v3/relative_16} & Sparse relative, 16 layers \\
+\code{runs/csc_lista_v3/relative_32} & Sparse relative, 32 layers \\
+\code{runs/csc_lista_strict/layers_32} & Strict, 32 layers \\
+\code{runs/csc_lista_strict/layers_64} & Strict, 64 layers \\
+\code{runs/csc_lista_lfista/layers_32} & Job 3 \\
+\code{runs/fista_net/run_1} & FISTA-Net run 1 \\
+\code{runs/fista_net/run_2} & FISTA-Net run 2 \\
+\code{runs/fista_net/run_2_interim_step4800} & Interim score of run 2 \\
+\code{runs/fista_depths} & FISTA at 32, 64 and 300, first grid \\
+\code{runs/fista_depths_lambda} & FISTA at 32, 64 and 300, wider grid \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section*{This booklet}
+
+\begin{itemize}
+\item \code{booklet/main.tex} is the main file, with one file per chapter in \code{booklet/chapters}.
+\item \code{booklet/make_figures.py} redraws the figures.
+\item \code{booklet/check_snippets.py} confirms that every code block still matches the repository.
+\end{itemize}
+
+\chapter{References}
+
+\begin{enumerate}
+\item J. Liu, X. Chen, Z. Wang and W. Yin, ``ALISTA: Analytic Weights Are As Good As Learned Weights in LISTA'',
+ICLR 2019.
+\item K. Gregor and Y. LeCun, ``Learning Fast Approximations of Sparse Coding'', ICML 2010.
+\item A. Beck and M. Teboulle, ``A Fast Iterative Shrinkage-Thresholding Algorithm for Linear Inverse Problems'',
+SIAM Journal on Imaging Sciences, 2009.
+\item T. Moreau and J. Bruna, ``Understanding Trainable Sparse Coding via Matrix Factorization'', ICLR 2017,
+arXiv 1609.00285.
+\item J. Xiang, Y. Dong and Y. Yang, ``FISTA-Net: Learning a Fast Iterative Shrinkage Thresholding Network for
+Inverse Problems in Imaging'', IEEE Transactions on Medical Imaging, arXiv 2008.02683. Code:
+\url{https://github.com/jinxixiang/FISTA-Net}.
+\end{enumerate}

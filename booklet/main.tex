@@ -1,0 +1,109 @@
+% QDM deblurring booklet. Compiled and checked with: tectonic main.tex
+% All sources are plain ASCII, so pdflatex or Overleaf should also work, but that is untested.
+% On Overleaf, upload the whole booklet folder and set main.tex as the main file.
+\documentclass[11pt,a4paper]{report}
+
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{textcomp}
+\usepackage[margin=2.4cm]{geometry}
+\usepackage{amsmath,amssymb,bm}
+\usepackage{graphicx}
+\usepackage{booktabs,tabularx,longtable,array}
+\usepackage{enumitem}
+\usepackage[table]{xcolor}
+\usepackage{listings}
+\usepackage[most]{tcolorbox}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,calc,fit}
+\usepackage{caption}
+\usepackage{float}
+\usepackage[hidelinks,hypertexnames=false]{hyperref}
+
+\graphicspath{{figures/}}
+\setlist{itemsep=2pt,topsep=4pt}
+\setlength{\parskip}{5pt}
+\setlength{\parindent}{0pt}
+\captionsetup{font=small,labelfont=bf}
+\renewcommand{\arraystretch}{1.2}
+
+\definecolor{accent}{HTML}{2A78D6}
+\definecolor{warm}{HTML}{EB6834}
+\definecolor{leaf}{HTML}{1BAF7A}
+\definecolor{ink}{HTML}{52514E}
+\definecolor{wash}{HTML}{F4F4F1}
+\definecolor{bluewash}{HTML}{EAF2FC}
+\definecolor{warmwash}{HTML}{FDEEE7}
+\definecolor{greenwash}{HTML}{E6F6F0}
+
+\newcommand{\um}{\,\textmu m}
+\newcommand{\muT}{\,\textmu T}
+\newcommand{\code}[1]{\texttt{\detokenize{#1}}}
+\newcommand{\soft}{\eta}
+\DeclareMathOperator{\sign}{sign}
+\DeclareMathOperator*{\argmin}{arg\,min}
+
+\lstdefinestyle{py}{
+  language=Python, basicstyle=\ttfamily\small, keywordstyle=\color{accent}\bfseries,
+  commentstyle=\color{ink}\itshape, stringstyle=\color{warm},
+  backgroundcolor=\color{wash}, frame=single, rulecolor=\color{wash},
+  breaklines=true, columns=fullflexible, keepspaces=true, showstringspaces=false,
+  xleftmargin=4pt, xrightmargin=4pt, framesep=5pt, aboveskip=8pt, belowskip=8pt,
+  breakatwhitespace=false, postbreak=\mbox{\textcolor{ink}{$\hookrightarrow$}\space},
+}
+% The argument names the source file; booklet/check_snippets.py checks every line against it.
+\lstnewenvironment{code*}[1]{\lstset{style=py,title={\footnotesize\ttfamily\detokenize{#1}}}}{}
+
+\newtcolorbox{keyidea}[1][Key idea]{enhanced,colback=bluewash,colframe=accent,
+  boxrule=0pt,leftrule=3pt,arc=0pt,left=8pt,right=8pt,top=5pt,bottom=5pt,
+  title={#1},coltitle=accent,fonttitle=\bfseries,colbacktitle=bluewash,attach title to upper={\par\smallskip}}
+\newtcolorbox{careful}[1][Be careful]{enhanced,colback=warmwash,colframe=warm,
+  boxrule=0pt,leftrule=3pt,arc=0pt,left=8pt,right=8pt,top=5pt,bottom=5pt,
+  title={#1},coltitle=warm,fonttitle=\bfseries,colbacktitle=warmwash,attach title to upper={\par\smallskip}}
+\newtcolorbox{defend}[1][If your professor asks]{enhanced,colback=greenwash,colframe=leaf,
+  boxrule=0pt,leftrule=3pt,arc=0pt,left=8pt,right=8pt,top=5pt,bottom=5pt,
+  title={#1},coltitle=leaf!70!black,fonttitle=\bfseries,colbacktitle=greenwash,attach title to upper={\par\smallskip}}
+
+\tikzset{
+  block/.style={draw=accent,fill=bluewash,rounded corners=2pt,minimum height=8mm,
+    align=center,font=\small,inner sep=4pt},
+  learned/.style={draw=warm,fill=warmwash,rounded corners=2pt,minimum height=8mm,
+    align=center,font=\small,inner sep=4pt},
+  fixed/.style={draw=ink,fill=wash,rounded corners=2pt,minimum height=8mm,
+    align=center,font=\small,inner sep=4pt},
+  flow/.style={-{Latex[length=2mm]},draw=ink,thick},
+  dashflow/.style={-{Latex[length=2mm]},draw=ink,dashed},
+  note/.style={font=\footnotesize,text=ink,align=center},
+}
+
+\title{\vspace{-1cm}\Huge\bfseries From Blurry Fields to CSC-LISTA and FISTA-Net\\[10pt]
+\Large\mdseries A teaching booklet for the one-standoff restart,\\
+3\um\ to 0.5\um, trained on simulation and tested on COMSOL}
+\author{Written for Abhay Chandra}
+\date{State of the project: 3 November 2026, all runs finished}
+
+\begin{document}
+\maketitle
+\pagenumbering{roman}
+\tableofcontents
+\clearpage
+\pagenumbering{arabic}
+
+\input{chapters/00_start}
+\input{chapters/01_problem}
+\input{chapters/02_simulation}
+\input{chapters/03_classics}
+\input{chapters/04_choice}
+\input{chapters/05_csc_lista}
+\input{chapters/06_dictionary}
+\input{chapters/07_training}
+\input{chapters/08_density}
+\input{chapters/09_results}
+\input{chapters/10_differences}
+\input{chapters/11_lfista}
+\input{chapters/12_fistanet}
+\input{chapters/13_defence}
+\appendix
+\input{chapters/14_appendix}
+
+\end{document}

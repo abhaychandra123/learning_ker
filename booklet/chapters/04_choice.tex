@@ -1,0 +1,116 @@
+\chapter{Choosing a published architecture}\label{ch:choice}
+
+\section{The idea of unrolling}
+
+Picture ISTA as a pipeline. One iteration is one box, so $K$ iterations are $K$ boxes in a row. Each box
+contains fixed numbers: $D^T/L$ and $\lambda/L$. Now stop treating those numbers as fixed. Make them
+trainable, one set per box, and train the whole chain by backpropagation. A loop has become a
+neural network.
+
+\begin{center}
+\begin{tikzpicture}[node distance=9mm]
+\node[fixed] (b) {$b$};
+\node[learned,right=of b] (l1) {Layer 1\\ $W_1,\theta_1$};
+\node[learned,right=of l1] (l2) {Layer 2\\ $W_2,\theta_2$};
+\node[right=of l2] (dots) {$\cdots$};
+\node[learned,right=of dots] (lk) {Layer $K$\\ $W_K,\theta_K$};
+\node[fixed,right=of lk] (x) {$x$};
+\draw[flow] (b)--(l1); \draw[flow] (l1)--(l2); \draw[flow] (l2)--(dots);
+\draw[flow] (dots)--(lk); \draw[flow] (lk)--(x);
+\end{tikzpicture}
+\end{center}
+
+This is \textbf{LISTA}, by Gregor and LeCun (2010). It is written in the ALISTA paper as:
+\begin{equation}
+x^{(k+1)} = \soft_{\theta^{(k)}}\big(W_1^{(k)} b + W_2^{(k)} x^{(k)}\big). \tag{Liu et al., Eq.~4}
+\end{equation}
+Setting $W_1=D^T/L$, $W_2=I-D^TD/L$ and $\theta=\lambda/L$ gives back ISTA exactly. So LISTA starts as
+ISTA and can only be taught to improve.
+
+\section{Why plain LISTA cannot run here}
+
+$W$ is a full matrix. An image has 1.96 million pixels, so such a matrix would have about
+$4\times10^{12}$ entries, and that is for a single pixel-to-pixel map. The earlier dense ALISTA code in
+the repository stays as it is, but it cannot run at 0.1\um.
+
+There is a way out. The blur is the same everywhere in the image. So we can use convolutions, which
+reuse one small filter at every position. This leads to \textbf{convolutional sparse coding}.
+
+\section{The ALISTA paper}
+
+Liu, Chen, Wang and Yin, ``ALISTA: Analytic Weights Are As Good As Learned Weights in LISTA'', ICLR
+2019. It has two main messages.
+
+\begin{enumerate}
+\item \textbf{Analysis.} The weights of LISTA do not all need to be learned. A single weight
+matrix can be computed from $D$ by a formula. Only step sizes and thresholds then need training.
+\item \textbf{Extension.} Section 3 carries all of this to convolutions.
+\end{enumerate}
+
+Section 3 starts with the convolutional model, Eq.~17:
+\begin{equation}
+b = \sum_{m=1}^{M} d_m * x_m^* + \varepsilon . \tag{Liu et al., Eq.~17}
+\end{equation}
+This is the same equation as our $b\approx\sum_m d_m*x_m$. Then the paper gives the two networks.
+
+\begin{center}
+\renewcommand{\arraystretch}{1.5}
+\begin{tabularx}{\textwidth}{l>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X}
+\toprule
+& \textbf{Eq.~20: CSC-LISTA} & \textbf{Eq.~26: Conv ALISTA} \\
+\midrule
+Update &
+$x_m \leftarrow \soft_{\theta^{(k)}}\!\big(x_m - (w_m^{(k)})' * (\sum_{\bar m} d_{\bar m}*x_{\bar m} - b)\big)$ &
+$x_m \leftarrow \soft_{\theta^{(k)}}\!\big(x_m - \gamma_m^{(k)} \tilde w_m' * (\sum_{\bar m} d_{\bar m}*x_{\bar m} - b)\big)$ \\
+Filters & $w_m^{(k)}$ learned, one set per layer & $\tilde w_m$ fixed, computed by formula \\
+Trained & All filters and thresholds & Only $\gamma$ and $\theta$ \\
+Parameters here & 24.6 million at 32 layers & About a thousand at 32 layers \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+The prime means a filter rotated by 180 degrees. Think of it as the convolutional version of a
+matrix transpose.
+
+\section{Why Eq.~20 and not Eq.~26}
+
+This choice was made during the session, for these reasons:
+
+\begin{enumerate}
+\item \textbf{The paper itself reports a small gap.} Its Appendix H denoising test gives Eq.~20 (the paper's ``Conv LISTA'', our CSC-LISTA) an
+average PSNR of 31.21 dB and Conv ALISTA 31.07 dB. Learned filters are not worse.
+\item \textbf{The analytic filters behaved badly on our blur.} In a small spike, the analytic weight
+acted almost like an inverse filter and amplified noise by hundreds of times or more. That spike used
+the field itself as the code, with one filter, which is not the model of Chapter~\ref{ch:classics}. Its
+code was deleted at your request, so treat this as a note from the session, not a reproducible result.
+\item \textbf{You chose.} You told me to drop Eq.~26 and remove everything related to it, so that it
+could not cause confusion later. The old dense ALISTA code stayed, also by your choice.
+\end{enumerate}
+
+\begin{careful}[The theory does not cover us]
+The paper proves fast convergence when the true code is very sparse. For our blur kernel, that limit
+worked out to about 1--2 active pixels, while the coil images have tens of thousands or more. So do not claim the
+convergence theorems apply here. Use the paper for its architecture, not for its guarantee.
+\end{careful}
+
+\section{Other options considered}
+
+\begin{center}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+Option & Status \\
+\midrule
+USRNet, ISTA-Net, MoDL & Discussed earlier as published unrolled networks. Not built \\
+LFISTA (Moreau and Bruna) & Dense form cannot run. A convolutional relative is Job 3,
+Chapter~\ref{ch:lfista} \\
+FISTA-Net (Xiang et al.) & You supplied this paper. It is Job 4, Chapter~\ref{ch:fistanet} \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{defend}
+\textbf{``Where does this network come from?''} The layer is Eq.~20 of Liu et al., ICLR 2019, and
+convolutional sparse coding is an established field. What is ours is using it for deblurring, by
+writing $d_m=h*g_m$. The paper's own experiment is denoising, so no published result exists for this exact
+use. Say this before you are asked.
+\end{defend}

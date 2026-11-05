@@ -1,0 +1,117 @@
+\chapter{Paper versus code: every difference}\label{ch:differences}
+
+This chapter is the one to bring to a meeting. It compares strict CSC-LISTA against Eq.~20 and Appendix H
+of Liu et al. It is more complete than the table in \code{README_CSC_LISTA.md}.
+
+\section{What matches the paper}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+Item & Status \\
+\midrule
+Layer update & Eq.~20, term by term. See Chapter~\ref{ch:csc_lista} \\
+Filter per layer & $w^{(k)}$ learned separately per layer \\
+Threshold & One $\theta^{(k)}$ per layer, shared by all atoms \\
+Output & Codes convolved with the original dictionary, as in Appendix H \\
+Loss & MSE between output and clean image, as in Appendix H \\
+Order of work & Dictionary first, then the network with the dictionary fixed \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{What is necessary for our problem}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{3.1cm}>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X}
+\toprule
+Item & Paper & Ours, and why \\
+\midrule
+Task & Denoising, $b=t+$noise & Deblurring, $b=h*t+$noise. This is our problem \\
+Dictionary in the data term & Small learned $d_m$, used directly & $d_m=h*g_m$, long blurred filters. This is how the blur gets into Eq.~20. No published result covers this use \\
+Normalisation & $\lVert d_m\rVert_2=1$ & $\lVert g_m\rVert_2=1$, so the blurred $d_m$ are not unit length \\
+Data & 400 natural images & Simulated fields, 512 pixel crops \\
+Boundary & Non-circular, $x$ larger than $b$ (Eq.~18) & FFT with zero padding, codes on the padded canvas, and a window mask on the residual. Same purpose, different method \\
+Layers & 5 & 16, 32 and 64, because the blur is far harder than the denoising task \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{What is our own engineering choice}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{3.1cm}>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X}
+\toprule
+Item & Paper & Ours \\
+\midrule
+Size of $w$ & Same size as $d_m$ & 155 pixels, shorter than the long blurred $d_m$. Trials showed little gain from larger \\
+Dictionary learning & Algorithm 1 of Liu et al.\ 2018 & Alternating FISTA and Adam \\
+Atoms & $M=64$, $D=7$ in its experiments & 32 atoms of 75 pixels \\
+Start of $w$ & Not specified for Eq.~20 & ISTA values, $d_m/L$, truncated \\
+Start of $\theta$ & Not specified for Eq.~20 & $\lambda/L$, with $\lambda=0.3$ \\
+Optimiser & Not specified in Appendix H & Adam, with a rate 3\% of each parameter's scale \\
+Rate schedule & Not specified & Cosine decay to zero \\
+Gradient clipping & Not mentioned & Norm limited to 1.0 \\
+Threshold sign & $\theta$ is a threshold, so $\ge0$ & \code{clamp_min(0)} in the layer, and a clamp at 0 after each step \\
+Loss region & Not stated & Middle of the crop, 64 pixel margin dropped \\
+Checkpoint & Not stated & Best simulated validation score \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{Additions that strict runs removed}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\textwidth}{lXl}
+\toprule
+Item & What it did & Used in \\
+\midrule
+Threshold floor & Kept $\theta$ at or above $\lambda/L$ & Sparse runs only \\
+Relative loss & Replaced MSE with per-crop relative $L_2$ & Relative runs only \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{defend}[The short version to memorise]
+``The layer, output and loss are from Eq.~20 and Appendix H of Liu et al. Three things are necessarily
+ours. We deblur rather than denoise, so the dictionary is $h*g$. We use FFT convolution with padding
+and a mask. And our dictionary learning is a substitute for theirs. Everything else is standard training
+practice, listed in full.''
+\end{defend}
+
+\begin{careful}
+A note on the paper's own text. Section 5 says the dictionary came from Algorithm 1 of Liu et al.\ 2018, while
+Appendix H says it was obtained ``by solving (24)'', which is the analytic weight problem. The second looks
+like loose wording, but the two statements do not match. If you are asked, quote Section 5.
+\end{careful}
+
+\section{Which code actually ran}
+
+Each server run used a frozen copy of the scripts, so later edits could not change it. The local \code{scripts/} folder,
+which this booklet quotes, is byte-identical to the frozen copy for FISTA-Net run 2, and FISTA-Net run 1 used the same code before the option for start
+values was added. The Job 3 and earlier CSC-LISTA runs used slightly older copies. They differ only in code those runs did not use, such as the momentum and Lasso
+options, so the Eq.~20 layer quoted here is the one that ran. The FISTA depth scores also came from a frozen copy,
+identical to \code{scripts/score_fista_depths.py}.
+
+\section{How the code was checked}
+
+Fifteen unit tests in \code{tests/test_csc_lista.py} pass on the server. These are the important ones:
+
+\begin{center}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+Test & What it proves \\
+\midrule
+\code{test_forward_and_adjoint_are_transposes} & The prime in Eq.~20 is correct \\
+\code{test_bound_is_the_operator_norm} & $L$ is the true largest eigenvalue \\
+\code{test_full_width_start_matches_ista} & The untrained network is ISTA \\
+\code{test_residual_ignores_the_padding} & The mask works \\
+\code{test_centred_filter_keeps_position} & Filters do not shift the image \\
+\code{test_training_lowers_loss_and_reaches_every_layer} & Gradients reach every layer \\
+\bottomrule
+\end{tabularx}
+\end{center}

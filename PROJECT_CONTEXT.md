@@ -1,5 +1,27 @@
 # Project context for a new coding chat
 
+## Single-standoff restart (31 October 2026)
+
+Current model and results: [README_CSC_LISTA.md](README_CSC_LISTA.md). CSC-LISTA (Eq. 20 of the ALISTA paper) was
+trained on v3 at 0.1 µm on the server. Selected model: FISTA-Net run 2, authors' start values, 9,000
+updates; COMSOL relative L2 33.3% against Wiener 49.3% and FISTA-300 30.5% (lambda 0.009).
+Strict CSC-LISTA at 64 layers scored 33.8%, FISTA-64 37.9%, convolutional LFISTA-style
+34.2% (exploratory), and FISTA-Net run 1 39.4% (paper start values, 750 updates).
+The old dense ALISTA code stays by user choice.
+
+After professor feedback that ConvLISTA has no published source, the user restarted
+at one standoff pair. See [README_SIMULATED_FIELDS.md](README_SIMULATED_FIELDS.md).
+`scripts/simulate_fields.py` makes current-layout training data for 3 → 0.5 µm;
+`scripts/plot_simulated.py` reports realism. `runs/simulated_3_to_05_v3` holds 200
+training and 50 validation layouts. COMSOL pairs are reserved as held-out tests.
+The user counts five
+configurations: L1_C1, IC_4um and the three in `data3`, giving 15 pairs at 3 → 0.5 µm.
+They hold only two wire shapes. The user confirmed IC_2um and IC_4um are the same
+coil, replacing the 29 September note below, and C2–C4 mirror C1. Do not count
+these as independent geometries. v3 uses free-space decay, correlated input speckle
+and mirrored coil arrays. The forward operator stays exp(-kz). The empirical k0=0.095
+rad/µm decay (cause unknown, not real physics) is off by the user's choice.
+
 ## Combined-data extension (22 October 2026)
 
 The user requested local code preparation before transferring to Prajna; they
@@ -538,3 +560,37 @@ thresholds projectedto0 firstupdate. This is executionvalidation, notformaltrain
 Attempted SSH BatchMode to10.129.6.189 blocked Operationnotpermitted. No remote
 four-arm job launched/stopped. User must execute bash hpc/launch_geometry_capacity_remote.sh
 from Mac terminal forauthentication. Do not claim GPU runs started withoutlog.
+
+## Depth extrapolation of trained ConvLISTA (2026-11-05)
+
+User asked to test the 16-layer models at 32/64 layers on the server. Because the
+163 parameters are tied across layers, `scripts/depth_extension.py` reruns the
+trained 23 Oct `combined_full_200/best.pt` (joint pad-32 operators) and the
+synthetic `augmented_1080/final.pt` (analytic pad 256) for 8..64 layers, without
+retraining, on all 17 COMSOL pairs × Bx/By/Bz. Matched-depth ISTA/FISTA use the
+same operator, scale, blurred start and lambda 1e-4 µT. Outputs metrics.csv
+(NRMSE, relative L2, slope per depth), summary.json and selected L1_C1 6/10 µm
+arrays. This is inference-only extrapolation, not a model trained at 32/64
+layers (geometry-capacity tied32 covers training; no tied64 arm exists).
+Server launch from the Mac: `bash hpc/launch_depth_extension_remote.sh`
+(copies sources to experiments/depth_extension_v1, output runs/depth_extension_v1,
+log logs/depth_extension_v1.log). Local CPU smoke on IC_2um: 16-layer outputs
+reproduce archived combined LISTA (max diff 3.1e-5 µT; NRMSE 2.600%) and the
+synthetic arm's IC_2um NRMSE 2.888%; ISTA16/FISTA16 match archived values.
+
+Server run completed 5 Nov 2026 (A6000, ~80 s per model; the synthetic checkpoint
+was copied from the Mac into experiments/depth_extension_v1/inputs because
+runs/synthetic_data_hypothesis_fast_v2 no longer exists on the server). Results
+copied to local runs/depth_extension_v1 with depth_curves.png and
+depth_by_height_L1_C1.png (scripts/plot_depth_extension.py). 16-layer GPU output
+matches archived LISTA exactly. Mean over 51 components, relative L2:
+23 Oct model 71.6/65.5/82.1/157/3250% at 8/16/24/32/64 layers (diverges, slope
+27 at 64); FISTA 73.1/66.1/60.7/56.8/48.9%. Synthetic model 67.5/64.7/64.1/
+65.3/88.2%; analytic-operator FISTA 68.3/64.0/61.9/61.0/61.4%. Cause: per-
+frequency gain |1 - s|H|^2 + C_x(f)| of the learned update reaches 1.105-1.109
+per layer (23 Oct) and 1.024 (synthetic) at ~6-12 µm wavelengths, i.e. the tied
+correction is non-contractive and the model relies on stopping at 16 layers.
+Synthetic model: depth helps L1_C1 8-10 µm (64 layers 74-85% vs 89-95%) but
+hurts 1-3 µm. Analytic-operator FISTA64 at L1_C1 1 µm is 90% vs FISTA16 39%
+(semi-convergence with lambda 1e-4 µT). Depth gains require training at depth
+and/or a stability constraint on the learned update.

@@ -1,0 +1,76 @@
+\chapter{Read this first}
+
+This booklet explains what was built after you gave the instructions: what each piece is,
+why it exists, and how the code matches the papers. It assumes you know what the project is
+about and that you have heard the words ISTA and LISTA. It does not assume you remember how
+any of them work, so everything is rebuilt from the start.
+
+\begin{careful}[One correction before anything else]
+You described the first network as ``the convolutional ALISTA part''. What runs is
+\textbf{not} Conv ALISTA. It is \textbf{CSC-LISTA (Eq.~20 of the ALISTA paper, Liu et al.\ 2019)}.
+
+The paper has two convolutional networks, and the names are easy to mix up:
+\begin{itemize}
+\item \textbf{CSC-LISTA, Eq.~20:} every filter is learned from data. This is what we use. The paper
+calls it ``Conv LISTA''; we call it CSC-LISTA, for convolutional sparse coding LISTA, so that it is not
+confused with the old ConvLISTA (in-house) from October that the professor criticised.
+\item \textbf{Conv ALISTA, Eq.~26:} the filters are calculated by a formula, and only a few
+scalars are learned. We tried a small version, you rejected it, and its code was deleted.
+\end{itemize}
+So ``the ALISTA paper'' is correct, but ``ALISTA'' as the name of our network is not. Say
+``CSC-LISTA, Eq.~20 of Liu et al.''
+\end{careful}
+
+\section*{The journey on one page}
+
+\begin{center}
+\begin{tikzpicture}[node distance=3.5mm,
+  stage/.style={draw=accent,fill=bluewash,rounded corners=2pt,text width=12.6cm,inner sep=5pt,font=\small},
+  arrow/.style={-{Latex[length=2mm]},draw=ink,thick}]
+\node[stage] (a) {\textbf{1. The professor's criticism.} The old ConvLISTA (in-house) had no published source, so the
+project restarted at one standoff pair: 3\um\ to 0.5\um.};
+\node[stage,below=of a] (b) {\textbf{2. Too few real pairs.} Only 15 COMSOL component pairs exist.
+So we simulate training data and keep COMSOL as the test.};
+\node[stage,below=of b] (c) {\textbf{3. Simulated data, v1 to v3.} Draw wires, compute all three field
+components with physics, add COMSOL-like speckle. Chapter~\ref{ch:simulation}.};
+\node[stage,below=of c] (d) {\textbf{4. Choosing a published network.} The ALISTA paper gives Eq.~20. We tried Eq.~26,
+then dropped it. Chapter~\ref{ch:choice}.};
+\node[stage,below=of d] (e) {\textbf{5. CSC-LISTA.} Learn a dictionary, then train 16 layers. The result was
+39.1\% error on COMSOL, against 49.3\% for Wiener. Chapters~\ref{ch:csc_lista} to~\ref{ch:training}.};
+\node[stage,below=of e] (f) {\textbf{6. The density problem.} The codes stopped being sparse, so we tried a threshold
+floor and a relative loss. Chapter~\ref{ch:density}.};
+\node[stage,below=of f] (g) {\textbf{7. Strict runs.} You asked for no additions. Strict 32 and 64 layers gave
+35.4\% and 33.8\%, the best CSC-LISTA so far. Chapter~\ref{ch:results}.};
+\node[stage,below=of g] (h) {\textbf{8. Two more networks.} A learned-FISTA style network scored 34.2\%, and FISTA-Net
+39.4\% without converging. Chapters~\ref{ch:lfista} and~\ref{ch:fistanet}.};
+\node[stage,below=of h] (i) {\textbf{9. FISTA rescored.} A wider search for $\lambda$ moved FISTA-300 to 30.5\%, and FISTA was scored
+at 32 and 64 iterations for a fair comparison. Chapter~\ref{ch:results}.};
+\node[stage,below=of i] (j) {\textbf{10. FISTA-Net rerun.} With the authors' start values and 9,000 updates it scored 33.3\%, the best
+trained network so far. Chapter~\ref{ch:fistanet}.};
+\foreach \x/\y in {a/b,b/c,c/d,d/e,e/f,f/g,g/h,h/i,i/j} \draw[arrow] (\x) -- (\y);
+\end{tikzpicture}
+\end{center}
+
+\section*{The result in one sentence}
+
+FISTA at 300 iterations, a classical algorithm with no trained layers, scores 30.5\% on COMSOL. The best trained network,
+FISTA-Net, scores 33.3\%, and strict Eq.~20 at 64 layers scores 33.8\%. All of them beat the Wiener filter's 49.3\% by a wide
+margin, and every score here is an error, so lower is better.
+
+\section*{How to use this booklet}
+
+\begin{itemize}
+\item \textbf{Blue boxes} hold the idea to remember.
+\item \textbf{Orange boxes} hold a trap or an honest limit.
+\item \textbf{Green boxes} hold what to say if your professor pushes on that point.
+\item \textbf{Grey code blocks} are copied from the repository, unchanged, apart from
+\texttt{\# ...} where lines are skipped. The file name is above each block.
+\end{itemize}
+
+If you only have an hour, read Chapters~\ref{ch:problem}, \ref{ch:density}, \ref{ch:results}
+and~\ref{ch:defence}.
+
+\begin{careful}[The numbers in this edition]
+All server runs have finished, so every table now holds a real score. Each run used one random seed. No number here
+is a prediction.
+\end{careful}

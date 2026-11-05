@@ -1,0 +1,117 @@
+\chapter{Training CSC-LISTA}\label{ch:training}
+
+\section{One training step}
+
+\begin{enumerate}
+\item Pick 8 random 512 pixel crops of simulated fields. A crop must contain real signal: its peak
+must be at least 0.05 in normalised units, or the code tries another position.
+\item Pad each input to 768 pixels.
+\item Run the network.
+\item Compute the loss on the middle of the crop. A margin of 64 pixels is dropped on each side,
+because edges are the least reliable.
+\item Backpropagate, clip the gradient, take an Adam step.
+\end{enumerate}
+
+\begin{code*}{train_csc_lista.py}
+            y = model(b)[..., pad:-pad, pad:-pad]
+            keep = (slice(None), slice(margin, -margin), slice(margin, -margin))
+            loss = crop_loss(y[keep], target[keep], args.loss)
+        optimiser.zero_grad()
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+        optimiser.step()
+        schedule.step()
+\end{code*}
+
+\section{The loss: MSE or relative}
+
+\begin{code*}{train_csc_lista.py}
+def crop_loss(output, target, kind):
+    """Mean squared error, or the mean per-crop relative L2 used for validation."""
+    if kind == 'relative':
+        return relative_l2(output, target).mean()
+    return ((output - target) ** 2).mean()
+\end{code*}
+
+\textbf{MSE} is the paper's loss. It counts every pixel's squared error equally, so crops with strong fields
+dominate. \textbf{Relative} divides by each crop's own size, so all crops count equally. It is also exactly the
+metric we report. We tried it because of a problem you will see in Chapter~\ref{ch:density}.
+
+\section{The learning rate problem}
+
+The first attempt crashed with NaN. The filters start around $2\times10^{-8}$ in size, and a normal Adam
+rate of $10^{-4}$ means each step is thousands of times larger than the value it changes. So the rate is now set
+relative to each parameter's own scale.
+
+\begin{code*}{train_csc_lista.py}
+    # Filters start near 1e-8, so a fixed rate would swamp them; scale it to each.
+    groups = [dict(params=[model.w], lr=args.lr_relative * float(model.w.pow(2).mean().sqrt())),
+              dict(params=[model.theta], lr=args.lr_relative * float(model.theta.abs().mean()))]
+\end{code*}
+
+With \code{lr_relative} at 0.03, each step changes a parameter by about 3\% of the typical size. The rate then
+decays along a cosine curve to zero by the last step.
+
+\section{Validation and checkpoints}
+
+Every 100 or 250 steps, the model is scored on 64 fixed crops from the validation layouts, which are
+never trained on. If the score beats the best so far, the model is saved to \code{best.pt}. After training,
+that best checkpoint is loaded and used for the COMSOL score.
+
+\begin{code*}{train_csc_lista.py}
+            if step == 0 or score < best:
+                best = score
+                torch.save(dict(state=model.state_dict(), step=step, score=score),
+                           output / 'best.pt')
+\end{code*}
+
+This matters a lot. In the strict runs the best step came very early, at 300 of 1,000 and 200 of 1,000.
+
+\begin{careful}[Validation and COMSOL scores cannot be compared directly]
+Validation crops are chosen to contain signal, and COMSOL scores use the full image, including large
+blank areas. So ``48.8\% on validation and 33.8\% on COMSOL'' does not mean COMSOL is easier.
+\end{careful}
+
+\section{Does the filter size matter?}
+
+You asked whether to make $w$ bigger. The physics suggested it might, since the blurred kernel has a long
+tail. Three 800-step trials on simulated validation gave a clear answer.
+
+\begin{center}
+\begin{tabular}{cc}
+\toprule
+Filter width & Validation error \\
+\midrule
+155 px & 52.35\% \\
+255 px & 52.02\% \\
+355 px & 51.99\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The difference is about a third of a point, and larger filters cost much more. So 155 stayed.
+
+\section{Hardware}
+
+All runs used the RTX A6000 with 48 GB, at batch 8.
+
+\begin{center}
+\begin{tabular}{rrrr}
+\toprule
+Layers & Parameters & Peak GPU memory & Time \\
+\midrule
+16 & 12.3 million & 12.8 GiB & 10,940 s for 2,000 steps \\
+32 & 24.6 million & 22.0 GiB & 5,037 s for 1,000 steps \\
+64 & 49.2 million & 40.2 GiB & 10,058 s for 1,000 steps \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Memory and time both grow with the number of layers, as you would expect from a chain of identical
+layers. Also note the two lengths: the first runs took 2,000 steps. Once MSE was seen to peak early, later
+runs used 1,000.
+
+\begin{careful}[One seed]
+Every run here used a single random seed. A difference of less than a point or so between two runs may
+be luck. No error bars exist.
+\end{careful}

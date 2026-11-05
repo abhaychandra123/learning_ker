@@ -1,0 +1,139 @@
+\chapter{Adding momentum: the LFISTA-style network}\label{ch:lfista}
+
+\begin{careful}[Read the label]
+This network is \textbf{our own combination}. It is inspired by LFISTA, but it is not the method of Moreau and
+Bruna. Do not present it as an implementation of their paper. It is an exploratory run.
+\end{careful}
+
+\section{The motivation}
+
+FISTA is the best method we have, so the question you asked was natural: can we merge the FISTA update with
+learning? Is there literature? Yes, there is.
+
+\section{LFISTA in the paper}
+
+Moreau and Bruna, ``Understanding Trainable Sparse Coding via Matrix Factorization'', ICLR 2017, arXiv 1609.00285.
+Their layer feeds in the last \emph{two} estimates, the way FISTA does:
+\begin{equation}
+z^{(k+1)} = \soft\big(W_g^{(k)} z^{(k)} + W_m^{(k)} z^{(k-1)} + W_e^{(k)} x\big).
+\end{equation}
+Here $x$ is the input signal, in their notation. Their $W$ matrices are dense and free. They start them at
+the values that make $K$ layers equal $K$ steps of FISTA. And they train by minimising the \textbf{Lasso objective}
+itself, not by comparing to a target.
+
+\section{Why it cannot run as published}
+
+Dense matrices between all code values at 0.1\um\ would need about 16 petabytes for each matrix. So you asked for
+the closest feasible version, and that is what Job 3 is.
+
+\section{What Job 3 does}
+
+Take Eq.~20 and move the layer's starting point using momentum.
+\begin{align}
+y^{(k)} &= x^{(k)} + \beta_k\big(x^{(k)} - x^{(k-1)}\big),\\
+x^{(k+1)} &= \soft_{\theta^{(k)}}\Big(y^{(k)} - \big(w^{(k)}\big)' * \big(\textstyle\sum_m d_m*y_m^{(k)} - b\big)\Big).
+\end{align}
+
+\begin{code*}{csc_lista.py}
+            y = update if self.beta is None else update + self.beta[k] * (update - x)
+            x = update
+\end{code*}
+
+Each $\beta_k$ is learned, starts at FISTA's own value, and stays within $[0,1]$. A test confirms that the untrained
+network matches FISTA to within 2\% when filters are wide enough.
+
+\begin{code*}{csc_lista.py}
+            t, start_beta = 1.0, []
+            for _ in range(layers):
+                t_next = (1 + (1 + 4 * t * t) ** .5) / 2
+                start_beta.append((t - 1) / t_next)
+                t = t_next
+\end{code*}
+
+\subsection*{The link to LFISTA}
+
+Expand the update and collect terms. Writing $W'$ for the correction filter and $D$ for the blurred dictionary:
+\begin{equation}
+x^{(k+1)} = \soft\Big(\underbrace{(1+\beta)(I-W'D)}_{W_g}\,x^{(k)}
++ \underbrace{(-\beta)(I-W'D)}_{W_m}\,x^{(k-1)}
++ \underbrace{W'}_{W_e}\,b\Big).
+\end{equation}
+So our layer has LFISTA's form, but with $W_g$, $W_m$ and $W_e$ all tied together through $W'$ and made convolutional.
+That is far more restricted than their free matrices.
+
+\subsection*{Training on the Lasso objective}
+
+Like LFISTA, this loss never looks at the target. It only asks the codes to score well on the Lasso objective. The
+best checkpoint, however, is still chosen by validation error against targets, the same as every other run.
+
+\begin{code*}{csc_lista.py}
+    def lasso_objective(self, b, lam):
+        """Mean of 0.5 ||mask(Dz - b)||^2 + lam ||z||_1 per pixel, as in LFISTA training."""
+        z = self.codes(b)
+        operator, mask = self.physics(b.shape[-1])
+        residual = mask * (operator.forward(z) - b)
+        value = .5 * (residual ** 2).sum((1, 2)) + lam * z.abs().sum((1, 2, 3))
+        return value.mean() / b.shape[-1] ** 2
+\end{code*}
+
+The value $\lambda=0.03$ is the one FISTA chose on validation. So in plain words, this network is being asked to
+\emph{reach FISTA's answer in 32 steps}.
+
+\section{How it differs from everything else}
+
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+ & Strict Eq.~20 & Job 3 & LFISTA as published \\
+\midrule
+Momentum & No & Yes, learned & Yes \\
+Weights & Convolutional & Convolutional, tied & Dense, free \\
+Loss & MSE with target & Lasso, no target & Lasso, no target \\
+Problem size & $768\times768$ & $768\times768$ & Small \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Result}
+
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+Method & Simulated validation & COMSOL & NRMSE \\
+\midrule
+FISTA-32, $\lambda=0.03$ (the start) & 50.9\% & 41.8\% & 3.00\% \\
+\textbf{LFISTA-style, 32 layers} & \textbf{42.8\%} & \textbf{34.2\%} & \textbf{2.47\%} \\
+FISTA-300, $\lambda=0.03$ (the goal) & 36.6\% & 32.1\% & 2.33\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Read this table as a story. The network starts as 32 steps of FISTA, and before training it scored 51.0\% on validation,
+matching FISTA-32's 50.9\%. Training asked it to reach the same Lasso solution faster. It closed 57\% of the gap to
+FISTA-300 on simulation and 78\% on COMSOL. Unlike the strict runs, it beat FISTA at equal depth on both.
+
+\begin{center}
+\begin{tabular}{rcc}
+\toprule
+Step & Validation error & Density \\
+\midrule
+0 & 51.0\% & 9.0\% \\
+100 & 45.8\% & 18.4\% \\
+500 & 43.3\% & 16.9\% \\
+1,000 & 42.8\% & 16.6\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Its validation error improved all the way to the last step, so the best checkpoint is step 1,000. It has 24,601,664
+parameters, which is strict 32 plus 32 values of $\beta$.
+
+\begin{careful}[Three things to know]
+\begin{itemize}
+\item 15 of the 32 values of $\beta$ ended pressed against the upper limit of 1. That limit is our clamp, so training
+may have wanted more momentum than we allowed.
+\item It used $\lambda=0.03$, chosen before FISTA was retuned. Whether $\lambda=0.009$ helps has not been tried.
+\item It is 0.4 points behind strict 64 layers with half the layers, but on one seed that gap means little. It remains our
+own combination, so it is not the selected model.
+\end{itemize}
+\end{careful}
