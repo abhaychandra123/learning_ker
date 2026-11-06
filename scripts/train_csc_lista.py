@@ -16,7 +16,7 @@ import pandas as pd
 import torch
 
 import csc_lista as csc
-from simulate_fields import COMPONENTS, SimulatedDataset, synthesise
+from simulate_fields import COMPONENTS, SimulatedDataset, draw_recipe, sample_seed, synthesise
 
 DX, IMAGE = 0.1, 1400
 DATA3 = ('C1_C2', 'C1_C2_C3', 'C1_C2_C3_C4')
@@ -97,6 +97,51 @@ class CodedSolver:
         return csc.Operator(self.atoms, chunk=self.chunk).forward(x)
 
 
+class FreshCrops(torch.utils.data.IterableDataset):
+    """Endless training crops, each from a layout drawn for it alone.
+
+    Crop i uses the recipe labelled stream_{i:08d} under the dataset's seed and settings,
+    so the stream is reproducible and never reuses a train_ or validation_ layout. Each
+    crop takes one random component and the same signal test as the stored-data path.
+    """
+
+    def __init__(self, settings, seed, scale, size):
+        super().__init__()
+        self.settings, self.seed, self.scale, self.size = settings, seed, scale, size
+
+    def __iter__(self):
+        info = torch.utils.data.get_worker_info()
+        index, step = (info.id, info.num_workers) if info else (0, 1)
+        while True:
+            yield self.crop(index)
+            index += step
+
+    def crop(self, index):
+        label = f'stream_{index:08d}'
+        item = synthesise(draw_recipe(self.seed, label, self.settings), self.settings)
+        rng = np.random.default_rng(sample_seed(self.seed, label + ':crop'))
+        component = int(rng.integers(len(COMPONENTS)))
+        target = item['target'][component] / self.scale
+        observed = item['input'][component] / self.scale
+        size = self.size
+        for _ in range(30):
+            row, col = (int(v) for v in rng.integers(0, target.shape[-1] - size + 1, 2))
+            if np.abs(target[row:row + size, col:col + size]).max() >= .05:
+                break
+        piece = (slice(row, row + size), slice(col, col + size))
+        return (torch.tensor(observed[piece], dtype=torch.float32),
+                torch.tensor(target[piece], dtype=torch.float32))
+
+
+def fresh_batches(dataset, args):
+    """Batches of fresh-layout crops from background workers; start before CUDA is used."""
+    loader = torch.utils.data.DataLoader(
+        FreshCrops(dataset.settings, dataset.manifest['seed'], dataset.scale, args.crop),
+        batch_size=args.batch, num_workers=args.stream_workers, prefetch_factor=4,
+        persistent_workers=True, worker_init_fn=lambda _: torch.set_num_threads(1))
+    return iter(loader)
+
+
 def paired_crops(pair, count, size, seed):
     """Fixed target and input crops at the same positions."""
     generator = torch.Generator().manual_seed(seed)
@@ -140,8 +185,9 @@ def dictionary_stage(args, targets, val_crops, device, output):
     return trial
 
 
-def train(args, model, train_set, val_crops, device, output):
-    targets, inputs = train_set
+def train(args, model, train_set, val_crops, device, output, batches=None):
+    """train_set holds stored arrays; with batches, every crop comes from a fresh layout."""
+    targets, inputs = train_set if batches is None else (None, None)
     # Filters start near 1e-8, so a fixed rate would swamp them; scale it to each.
     groups = [dict(params=[model.w], lr=args.lr_relative * float(model.w.pow(2).mean().sqrt())),
               dict(params=[model.theta], lr=args.lr_relative * float(model.theta.abs().mean()))]
@@ -177,17 +223,21 @@ def train(args, model, train_set, val_crops, device, output):
                   f'density {density:.3f} zero thresholds {zero}/{model.layers}', flush=True)
         if step == args.steps:
             break
-        chosen = []
-        for _ in range(args.batch):
-            index = int(torch.randint(0, len(targets), (1,), generator=generator))
-            for _ in range(30):
-                row = int(torch.randint(0, IMAGE - size + 1, (1,), generator=generator))
-                col = int(torch.randint(0, IMAGE - size + 1, (1,), generator=generator))
-                if float(targets[index, row:row + size, col:col + size].abs().max()) >= .05:
-                    break
-            chosen.append((index, row, col))
-        b = padded(torch.stack([inputs[i, r:r + size, c:c + size] for i, r, c in chosen]).to(device), pad)
-        target = torch.stack([targets[i, r:r + size, c:c + size] for i, r, c in chosen]).to(device)
+        if batches is not None:
+            observed, target = next(batches)
+            b, target = padded(observed.to(device), pad), target.to(device)
+        else:
+            chosen = []
+            for _ in range(args.batch):
+                index = int(torch.randint(0, len(targets), (1,), generator=generator))
+                for _ in range(30):
+                    row = int(torch.randint(0, IMAGE - size + 1, (1,), generator=generator))
+                    col = int(torch.randint(0, IMAGE - size + 1, (1,), generator=generator))
+                    if float(targets[index, row:row + size, col:col + size].abs().max()) >= .05:
+                        break
+                chosen.append((index, row, col))
+            b = padded(torch.stack([inputs[i, r:r + size, c:c + size] for i, r, c in chosen]).to(device), pad)
+            target = torch.stack([targets[i, r:r + size, c:c + size] for i, r, c in chosen]).to(device)
         if args.loss == 'lasso':
             loss = model.lasso_objective(b, args.lasso_lambda)
         else:
@@ -262,6 +312,9 @@ def parser():
     p.add_argument('--pad', type=int, default=128)
     p.add_argument('--chunk', type=int, default=8)
     p.add_argument('--workers', type=int, default=8)
+    p.add_argument('--stream', action='store_true',
+                   help='Train on a fresh simulated layout for every crop; needs --dictionary')
+    p.add_argument('--stream-workers', type=int, default=12)
     p.add_argument('--z-delta', type=float, default=2.5)
     p.add_argument('--seed', type=int, default=0)
     p.add_argument('--device', default='cuda')
@@ -270,6 +323,8 @@ def parser():
 
 def main():
     args = parser().parse_args()
+    if args.stream and not args.dictionary:
+        raise SystemExit('--stream needs --dictionary: the dictionary stage uses stored data')
     torch.manual_seed(args.seed)
     output = Path(args.output)
     output.mkdir(parents=True, exist_ok=False)
@@ -277,9 +332,11 @@ def main():
     device = torch.device(args.device)
     dataset = SimulatedDataset(args.dataset)
     print('loading simulated fields', flush=True)
-    train_set = simulated(dataset, 'train', args.workers)
+    batches = fresh_batches(dataset, args) if args.stream else None
+    train_set = None if args.stream else simulated(dataset, 'train', args.workers)
     val_set = simulated(dataset, 'validation', args.workers)
-    print('train', train_set[0].shape, 'validation', val_set[0].shape, flush=True)
+    print('train', 'fresh layouts' if args.stream else train_set[0].shape,
+          'validation', val_set[0].shape, flush=True)
     val_crops = paired_crops(val_set, args.val_crops, args.crop, args.seed + 1)
     if args.dictionary:
         saved = torch.load(args.dictionary, weights_only=True)
@@ -302,7 +359,7 @@ def main():
         baseline = min((error(csc.Dataless(DX, args.z_delta, mu), val_crops[1], val_crops[0],
                               args.pad, device, 8), mu) for mu in 10.0 ** np.arange(-6, 0, .5))
         print('Wiener on these validation crops', baseline, flush=True)
-        train(args, model, train_set, val_crops, device, output)
+        train(args, model, train_set, val_crops, device, output, batches)
         return
 
     methods = {}
@@ -320,7 +377,7 @@ def main():
         methods['ista16'] = CodedSolver(g, args.z_delta, solver[1], 16, args.pad, False, args.chunk)
         methods['fista300'] = CodedSolver(g, args.z_delta, solver[1], 300, args.pad, True, args.chunk)
 
-    train(args, model, train_set, val_crops, device, output)
+    train(args, model, train_set, val_crops, device, output, batches)
     methods['csc_lista'] = model
     validation = {name: error(run, val_crops[1], val_crops[0], args.pad, device, 4)
                   for name, run in methods.items()}
@@ -330,6 +387,7 @@ def main():
                for name in methods}
     (output / 'results.json').write_text(json.dumps(dict(
         parameters=parameters, dictionary=choice, wiener=wiener, fista=solver,
+        training_layouts=args.steps * args.batch if args.stream else len(dataset.recipes('train')),
         validation=validation, comsol_mean_relative_l2=summary, comsol=rows), indent=2))
     print('COMSOL mean relative L2', summary)
 

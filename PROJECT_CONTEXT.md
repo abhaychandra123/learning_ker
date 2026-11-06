@@ -1,5 +1,15 @@
 # Project context for a new coding chat
 
+## Wiener oracle across standoffs (5 November 2026)
+
+See [README_WIENER_ORACLE.md](README_WIENER_ORACLE.md). `scripts/wiener_oracle.py` fits
+canonical Wiener filters H S_x/(H² S_x + S_n) from COMSOL pairs, one per height pair, with
+oracle, leave-configuration-out and leave-height-out scores. Local run (17 pairs, no data3):
+at 3 → 0.5 µm the held-out real Wiener scores 36–38% against 49.7% for the old μ = 0.0316
+baseline. Nearly all of the gain is the noise level: a COMSOL-fitted scalar μ ties it from
+3 µm up, and the SNR(k) shape helps only at 1–2 µm. It still trails FISTA-300 (30.5%).
+Server rerun with data3 and the extra COMSOL data is pending.
+
 ## Single-standoff restart (31 October 2026)
 
 Current model and results: [README_CSC_LISTA.md](README_CSC_LISTA.md). CSC-LISTA (Eq. 20 of the ALISTA paper) was

@@ -145,5 +145,37 @@ class Loss(unittest.TestCase):
                                float(((output - target) ** 2).mean()))
 
 
+
+class Stream(unittest.TestCase):
+    # A coarse 0.4 um grid keeps the generator fast; the code path is the same.
+    SETTINGS = dict(nx=350, ny=350, dx=0.4, pad=175, z_input=3.0, z_target=0.5, current_a=600e-6,
+                    width_um=(1.6, 3.2), offset_um=(0.0, 0.2), noise_percent=(1.0, 2.5),
+                    noise_corr_um=0.38, decay_k0=0.0, decay_ref_um=0.5, psf_sigma_um=0.0)
+
+    def crops(self):
+        return trainer.FreshCrops(self.SETTINGS, 0, 100.0, 64)
+
+    def test_crops_are_reproducible_and_shaped(self):
+        a, b = self.crops().crop(3), self.crops().crop(3)
+        self.assertEqual(a[0].shape, (64, 64))
+        self.assertTrue(torch.equal(a[0], b[0]) and torch.equal(a[1], b[1]))
+
+    def test_every_crop_has_its_own_layout(self):
+        first, second = self.crops().crop(0), self.crops().crop(1)
+        self.assertFalse(torch.equal(first[1], second[1]))
+
+    def test_stream_never_reuses_stored_layouts(self):
+        from simulate_fields import draw_recipe
+        fresh = draw_recipe(0, 'stream_00000000', self.SETTINGS)['paths_um']
+        for label in ('train_00000', 'validation_00000'):
+            self.assertNotEqual(fresh, draw_recipe(0, label, self.SETTINGS)['paths_um'])
+
+    def test_workers_split_the_stream(self):
+        loader = torch.utils.data.DataLoader(self.crops(), batch_size=2, num_workers=2)
+        it = iter(loader)
+        first, second = next(it), next(it)
+        self.assertFalse(torch.equal(first[1], second[1]))
+
+
 if __name__ == '__main__':
     unittest.main()
