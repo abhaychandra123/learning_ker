@@ -7,19 +7,25 @@ Term & Meaning \\
 \endhead
 Adjoint & The transpose of an operator. For a convolution it is the 180-degree rotated filter \\
 Atom & One small image in a dictionary, $g_m$ \\
+BatchNorm & A layer that normalises each channel. It uses batch statistics in training and stored running statistics at test time \\
 Checkpoint & A saved copy of a model. Also a separate memory trick in \code{torch.utils.checkpoint} \\
 Code & A map $x_m$ saying where and how strongly to stamp atom $m$ \\
 COMSOL & The finite-element simulation we use as test data \\
 Density & Fraction of code values that are not exactly zero \\
 Dictionary & The set of atoms \\
-Epoch & One pass over the training data. Here, 600 crops \\
+Epoch & One pass over the training data. Here, 600 crops; for MAGIC-UNet, 153,600 crops \\
+Equivalent sheet current & $J_\text{eff}=J\,e^{-kd}$: the current at the reference plane that gives the same field as the true current a depth $d$ below it \\
 FISTA & ISTA plus momentum \\
 Ill-posed & A problem where the data alone does not fix the answer \\
 ISTA & Gradient step plus shrink, repeated \\
 Lasso & Least squares plus an $\ell_1$ penalty \\
+Lost-band floor & The error left if every frequency above the signal-to-noise crossing is lost and nothing is invented \\
+MAGIC-UNet & The U-Net of Reed et al.\ 2024, from vector field to current \\
 LISTA & ISTA unrolled into layers with learned weights \\
 Mask & An array of 0s and 1s that hides the padding \\
 NRMSE & Root mean square error divided by the target's range \\
+Oracle & A score from a method fitted on its own test data: a ceiling, not a usable method \\
+Pipeline floor & MAGIC-UNet's error with a perfect current, from cutting the image into tiles: 2.9\% \\
 Plain & Eq.~20 with no threshold floor \\
 Relative $L_2$ & $\lVert y-t\rVert_2/\lVert t\rVert_2$, our main score \\
 Residual & The mismatch between predicted and measured data \\
@@ -27,7 +33,11 @@ Shrink, soft threshold & Move a value toward zero by $\theta$, stopping at zero 
 Sparse (run) & Eq.~20 with a floor on the thresholds, our addition \\
 Speckle & Fine mesh noise in COMSOL fields \\
 Standoff & Distance between source and sensor \\
+Standoff ambiguity & A source at depth $h$ and a sharper one at $h+\delta$ give the same field \\
 Strict & Plain Eq.~20 with MSE, at 32 and 64 layers \\
+Stream & Training on a newly simulated layout for every crop \\
+Tile & A $64\times64$ piece of the image that MAGIC-UNet processes at a time \\
+U-Net & A network that shrinks the image in an encoder and grows it back in a decoder, with skip connections between them \\
 Unrolling & Turning iterations into network layers \\
 Upward continuation & The exact law for how a field changes with height \\
 Wiener & $h/(h^2+\mu)$, a one-parameter deblurring filter \\
@@ -50,7 +60,14 @@ File & Contents \\
 \code{scripts/fista_net.py} & FISTA-Net \\
 \code{scripts/train_fista_net.py} & FISTA-Net training \\
 \code{scripts/score_fista_depths.py} & FISTA at chosen depths, with a $\lambda$ search \\
-\code{tests/test_*.py} & 15 simulation, 15 CSC-LISTA and 8 FISTA-Net tests \\
+\code{tests/test_*.py} & 15 simulation, 15 CSC-LISTA and 8 FISTA-Net tests; 14 MAGIC-UNet tests \\
+\code{scripts/wiener_oracle.py} & Wiener filters fitted on COMSOL (Chapter~\ref{ch:floor}) \\
+\code{scripts/information_budget.py} & Lost-band floor per pair \\
+\code{scripts/magic_unet.py} & MAGIC-UNet, Keras initialisation, tiling, Biot--Savart, metrics \\
+\code{scripts/magic_data.py} & MAGIC-UNet training crops, noise per crop, \code{--resigma}, \code{--z-uniform} \\
+\code{scripts/train_magic_unet.py} & MAGIC-UNet training and scoring \\
+\code{hpc/run_magic_unet.sh} & Server run: data, then training; re-run to resume \\
+\code{README_MAGIC_UNET.md}, \code{RESEARCH_BEYOND_ISTA.md} & Notes for Chapters~\ref{ch:question} to~\ref{ch:magic_results} \\
 \bottomrule
 \end{tabularx}
 \end{center}
@@ -78,6 +95,12 @@ Folder & Contents \\
 \code{runs/fista_net/run_2_interim_step4800} & Interim score of run 2 \\
 \code{runs/fista_depths} & FISTA at 32, 64 and 300, first grid \\
 \code{runs/fista_depths_lambda} & FISTA at 32, 64 and 300, wider grid \\
+\code{runs/csc_lista_stream/layers_64} & Strict 64, 8,000 streamed layouts \\
+\code{runs/csc_lista_relative} & Strict 64 with relative loss, stored and streamed \\
+\code{runs/magic_unet/run} & MAGIC-UNet run 1 (invalid, BatchNorm) \\
+\code{runs/magic_unet/run2} & MAGIC-UNet run 2 \\
+\code{runs/magic_unet/run3} & MAGIC-UNet run 3, standoff 1--10\um\ (running) \\
+\code{runs/magic_unet/data}, \code{data_any} & Training crops for runs 1--2 and run 3 \\
 \bottomrule
 \end{tabularx}
 \end{center}
@@ -86,7 +109,7 @@ Folder & Contents \\
 
 \begin{itemize}
 \item \code{booklet/main.tex} is the main file, with one file per chapter in \code{booklet/chapters}.
-\item \code{booklet/make_figures.py} redraws the figures.
+\item \code{booklet/make_figures.py} redraws the figures. \code{booklet/export_magic.py} exports the MAGIC-UNet data it needs from the server.
 \item \code{booklet/check_snippets.py} confirms that every code block still matches the repository.
 \end{itemize}
 
@@ -103,4 +126,7 @@ arXiv 1609.00285.
 \item J. Xiang, Y. Dong and Y. Yang, ``FISTA-Net: Learning a Fast Iterative Shrinkage Thresholding Network for
 Inverse Problems in Imaging'', IEEE Transactions on Medical Imaging, arXiv 2008.02683. Code:
 \url{https://github.com/jinxixiang/FISTA-Net}.
+\item N. R. Reed, D. Bhutto et al., ``Machine Learning for Improved Current Density Reconstruction from 2D Vector Magnetic Images'',
+arXiv 2407.14553, 2024. Trained model: Harvard Dataverse, doi:10.7910/DVN/SD6PVP.
+\item Further sources for Chapter~\ref{ch:question} are listed with links in \code{RESEARCH_BEYOND_ISTA.md}.
 \end{enumerate}

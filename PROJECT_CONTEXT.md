@@ -1,5 +1,62 @@
 # Project context for a new coding chat
 
+## COMSOL model files analysed (14 November 2026)
+
+See [README_COMSOL_MODEL.md](README_COMSOL_MODEL.md); scripts in `scripts/comsol_check/`; inputs in `COMSOL_params/`.
+The high-standoff failure is explained: COMSOL's air field decays at √(k² + k₀²), k₀ ≈ 0.10 rad/µm (Extra Fine mesh;
+larger on Extremely Fine), the same at every height, so it is numerical, not magnetostatics. The model's 140 × 140 × 90
+µm box with B·n = 0 is visible in the data but is not the cause. With the exact DXF coil (2.00 µm, zero-thickness sheet
+at z = 0, 600 µA), walls and k₀, the simulator matches COMSOL to 10–12% at 3–12.5 µm (held-out C1–C4 included);
+free space gives 65 / 61 / 134% at 10 µm. The 90° rotation is the cut-plane frame (cpl1x = −Y, cpl1y = X). Original
+L1_C1 exports = Extra Fine mesh. Whether to add k₀ to the simulator is the user's decision; nothing was changed.
+
+## Final evaluation on 20 November 2026 (status 12 November)
+
+Storyline, final scoreboard and remaining work: [FINAL_EVALUATION_PLAN.md](FINAL_EVALUATION_PLAN.md). The M2e seeds
+are done (`M1_M2_RESULTS.md` §M2e): corrected MAGIC-UNet run 2 scores 24.3 / 24.5 / 24.5% over three seeds and beats
+FISTA-1000 (26.7%) on all 15 pairs and on the C1 family; on IC_4um it is not distinguishable (26.4 / 27.5 / 30.9%
+against 27.2%). Raw run 2 ties FISTA-1000. The geometry-capacity experiment did run on the server (actual relative
+L2: tied16 67.6%, tied32 65.6%, untied16 61.6%, untied32 59.6%). Server `/home` was 98% full (13 GB free).
+
+## Review and milestones M1/M2 (10 November 2026)
+
+[FABLE_REVIEW.md](FABLE_REVIEW.md) is a critical review of the whole project with a roadmap (§4.2, M1–M8). M1 and
+M2 were then run on the server under a protocol fixed and hashed beforehand ([M1_M2_PROTOCOL.md](M1_M2_PROTOCOL.md));
+results in [M1_M2_RESULTS.md](M1_M2_RESULTS.md), outputs in `runs/m1_m2` (server; small files copied locally).
+Current numbers at 3 → 0.5 µm, 15 COMSOL pairs:
+
+- MAGIC-UNet run 2 + one Tikhonov data-consistency step at the height read from its own current, μ(h) chosen on
+  simulation: **24.3%** (raw 27.0%). Best result so far; standoff not given.
+- FISTA is best at 1,000 iterations (26.7%; 300 iterations 30.5%, 3,000 27.4%). FISTA-1000 is the classical
+  baseline from now on; FISTA-300 was early-stopped.
+- Noise edge of the COMSOL targets 2.9 rad/µm; about 15.7% of the target norm lies above it and no method can score
+  there. Report scores four ways (raw, low-passed, in-band, prior band) with `scripts/m2_fourway.py`.
+- A global height read-out does not rescue run 3 on IC_4um (46.9%; 37.3% at the true height).
+- Two more seeds of run 2 were training at the time of writing (`runs/m1_m2/magic_seed{1,2}`), followed by an
+  automatic re-score with the correction (`runs/m1_m2/m1_seeds`). See §M2e of the results file for the spread.
+
+New code: `scripts/m12_common.py` (tested in `tests/test_m12_common.py`), `scripts/m1_rescore.py`,
+`scripts/m2_*.py`, `scripts/m12_report.py`, `hpc/run_m2_*.sh`.
+
+## MAGIC-UNet port (7 November 2026)
+
+See [README_MAGIC_UNET.md](README_MAGIC_UNET.md). Exact released architecture of Reed et al. 2024 (layer graph from
+their trained model, `tests/data/magic_unet_released_layers.json`), paper's training recipe, our simulator,
+standoff N(3, 0.6) µm unknown to the network, 0.2 µm pixels, 64×64 tiles, target = equivalent sheet current,
+near-plane field by Biot–Savart. Pipeline floor with a perfect current 2.93%. Full run launched on the server
+(`runs/magic_unet`). Results since: run 2 27.0%, run 3 (standoff 1–10 µm) 34.8% with IC_4um 52%; see
+`README_MAGIC_UNET.md` and the M1/M2 section above. Training and pilots must run on the server, never on the Mac.
+
+## Research landscape for unknown standoff (7 November 2026)
+
+See [RESEARCH_BEYOND_ISTA.md](RESEARCH_BEYOND_ISTA.md). Literature survey for the full question (joint
+standoff estimation and reconstruction across standoffs, geometries, FOV, pitch), nothing implemented.
+A sheet at depth h and a sharper sheet at h + δ give identical measurements, so only a source prior can fix
+height and near-plane field together. `scripts/information_budget.py`: the lost-band floor rises from 17.5%
+(1 → 0.5 µm) to 56% (L1_C1 10 → 0.5) and 73.5% (IC_4um 10 → 0.5); at 3 µm it matches the Wiener oracle and
+every learned method is within 4 points of it. Next step proposed: identifiability go/no-go (fit a regularised
+current at candidate heights on COMSOL, check the minimum lands on the true height).
+
 ## Wiener oracle across standoffs (5 November 2026)
 
 See [README_WIENER_ORACLE.md](README_WIENER_ORACLE.md). `scripts/wiener_oracle.py` fits

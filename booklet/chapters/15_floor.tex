@@ -1,0 +1,104 @@
+\chapter{How far can a linear filter go?}\label{ch:floor}
+
+The chapters so far end on 5 November. This chapter and the four after it cover what happened next. Everything here is
+still about the 3\um\ to 0.5\um\ problem, unless a section says otherwise.
+
+\section{Why ask this}
+
+Every learned method in Chapter~\ref{ch:results} sat between 30\% and 36\% on COMSOL. Is that close to a hard
+limit, or is there a lot of room left? To answer that, we first need the best score a simple \emph{linear} filter could
+possibly reach. A linear filter cannot invent anything: it can only boost or damp each frequency that is in the data.
+
+\section{The Wiener filter, fitted on COMSOL}
+
+Our old Wiener baseline was $h/(h^2+\mu)$ with one number $\mu=0.0316$, chosen on simulated data. The real Wiener
+filter uses how strong the signal and the noise are at each frequency:
+\begin{equation}
+W(k) = \frac{H(k)\,S_x(k)}{H(k)^2 S_x(k) + S_n(k)},
+\end{equation}
+where $H(k)=e^{-k\,\Delta z}$ is the blur, $S_x$ is the power of the sharp field and $S_n$ is the power of the noise.
+The script \code{scripts/wiener_oracle.py} measures $S_x$ and $S_n$ from the COMSOL pairs themselves. Here ``noise'' means
+whatever the blur model cannot explain: COMSOL's mesh speckle plus any mismatch with free-space physics.
+
+It fits the filter in three ways:
+\begin{itemize}
+\item \textbf{Oracle:} fitted on the same pairs it is scored on. This is not a usable method; it is a ceiling.
+\item \textbf{Other coil:} fitted on one coil, scored on the other.
+\item \textbf{Other coil and other heights:} the most honest test.
+\end{itemize}
+
+\begin{center}
+\begin{tabular}{lc}
+\toprule
+Filter (local data, two coils, 3\um\ to 0.5\um) & Error \\
+\midrule
+Old Tikhonov, $\mu=0.0316$ from simulated noise & 49.7\% \\
+Scalar $\mu$, fitted on the other coil & 37.3\% \\
+Real Wiener, fitted on the other coil & 37.8\% \\
+Real Wiener, other coil and other heights & 36.1\% \\
+Real Wiener, oracle (ceiling for linear filters) & 34.4\% \\
+\midrule
+FISTA-300, for reference (15 pairs) & 30.5\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{keyidea}[What the Wiener test showed]
+\begin{itemize}
+\item The old baseline was badly tuned. Its $\mu$ assumed noise about 18 times stronger than COMSOL really has.
+\item Almost all the gain comes from that one number. A single, well-chosen $\mu$ does as well as the full
+frequency-shaped filter from 3\um\ up.
+\item Even the oracle, at 34.4\%, stays behind FISTA-300 and FISTA-Net. They beat every possible linear filter.
+\end{itemize}
+\end{keyidea}
+
+\begin{careful}
+The fitted Wiener filters saw COMSOL data from another coil; the old $\mu$ saw none. Part of their gain is simply
+access to real COMSOL statistics, which a method trained only on simulation does not have. These numbers also come from
+the two local coils only. The server rerun with data3 has not been done.
+\end{careful}
+
+\section{The lost-band floor}
+
+There is a cleaner way to see the limit. At each frequency, compare the signal that survives the blur with the noise.
+Above the frequency where the two are equal (signal-to-noise ratio 1), the data carry no usable information. Now take
+the \emph{true} target and delete everything above that frequency. Its error is the \textbf{lost-band floor}: what you
+lose if you recover every usable frequency perfectly and invent nothing. The script is
+\code{scripts/information_budget.py}.
+
+\begin{center}
+\small
+\begin{tabular}{lccccc}
+\toprule
+Input height (\textmu m), target 0.5\um & 1 & 2 & 3 & 4 & 5 \\
+\midrule
+Floor, L1\_C1 & 17.5\% & 21.0\% & 33.4\% & 39.8\% & 41.3\% \\
+Floor, IC\_4um & -- & -- & 35.6\% & 42.6\% & 52.4\% \\
+Wiener oracle, mean of coils & 18.0\% & 23.8\% & 34.4\% & 41.2\% & 45.9\% \\
+\midrule
+Input height (\textmu m) & 6 & 7 & 8 & 9 & 10 \\
+\midrule
+Floor, L1\_C1 & 42.6\% & 44.8\% & 47.4\% & 53.6\% & 56.0\% \\
+Floor, IC\_4um & 58.2\% & 65.4\% & -- & -- & 73.5\% \\
+Wiener oracle, mean of coils & 51.0\% & 56.7\% & 50.3\% & 55.3\% & 72.8\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Heights 1, 2, 8 and 9\um\ exist for L1\_C1 only, so their oracle row covers one coil. IC\_4um is harder at every height.
+
+At 3\um\ the floor over both coils is 34.5\%, the same as the Wiener oracle. That is no coincidence: the Wiener filter is
+close to ``keep the usable band, drop the rest''.
+
+\begin{keyidea}[The most important number in these chapters]
+At 3\um\ to 0.5\um, about a third of the target lies in frequencies the data cannot see. Any method that scores below
+34.5\% must be \emph{filling in} those frequencies from a prior: an idea of what sources look like. FISTA does this with its
+dictionary, and MAGIC-UNet (Chapter~\ref{ch:magic_results}) with what it learned from simulated wires. From 4\um\ up, 40 to
+70\% of the target must come from the prior. So at large standoffs the prior matters more than the algorithm.
+\end{keyidea}
+
+\begin{defend}[If your professor asks: why are all the scores near 30\%?]
+Because a third of the target is not in the measurement at all. The lost-band floor at 3\um\ is 34.5\%, and the best
+linear filter reaches 34.4\%. FISTA-300 (30.5\%) and MAGIC-UNet (27.0\%) beat it only because their priors fill in part of
+the lost band.
+\end{defend}

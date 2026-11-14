@@ -1,0 +1,202 @@
+\chapter{MAGIC-UNet: the paper and our copy}\label{ch:magic}
+
+\section{The paper}
+
+Reed et al., ``Machine Learning for Improved Current Density Reconstruction from 2D Vector Magnetic Images'',
+arXiv 2407.14553 (2024). They measure the vector field $(B_x, B_y, B_z)$ of wires in a QDM and want the current density
+$(J_x, J_y)$ that made it. Their network is a U-Net, so we call it MAGIC-UNet.
+
+\begin{keyidea}[Why this paper, for our question]
+It is the strongest published \emph{learned} method that works in the current domain, and it already does something our
+question needs: \textbf{it is trained over a range of standoffs and is never told which one}. Their standoff is drawn
+from $50\pm10$\um\ for every training image. So one trained network handles an unknown standoff inside that range.
+\end{keyidea}
+
+\section{What they did}
+
+\begin{center}
+\small
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{3cm}X}
+\toprule
+Item & Paper \\
+\midrule
+Task & Vector field at one plane to planar current $(J_x, J_y)$ \\
+Network & U-Net on $64\times64$ images: three levels of $2\times2$ average pooling, 64, 128, 256 then 512 channels, three
+[conv $3\times3$, BatchNorm, ReLU] blocks per level, then \textbf{two separate decoders}, one for $J_x$ and one for $J_y$ \\
+Data & 153,600 training and 4,096 validation pairs of random wires, fields from Biot--Savart \\
+Standoff & Drawn per image, $50\pm10$\um, never given to the network. A second model used $500\pm50$\um \\
+Augmentation & Quarter turns and flips (8 variants). About 2\% of images have wires only outside the view \\
+Noise & White Gaussian noise, drawn fresh every epoch \\
+Scaling & Input divided by $\alpha = \max|B|$ of that image; output divided by the same $\alpha$, times a global $\beta$ \\
+Training & RMSprop, learning rate $10^{-4}$, 50 epochs, batch 32, MSE \\
+Large images & Overlapping $64\times64$ tiles, with each overlap split between neighbours \\
+Their limits & Weaker on correlated experimental noise, on several current planes, and at 500\um \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{Four sources, and which one we follow}
+
+You asked for the exact architecture. That needed some detective work, because the sources disagree.
+\begin{enumerate}
+\item \textbf{The paper} gives the design and the training recipe.
+\item \textbf{The released trained model} (Harvard Dataverse) contains the full layer graph. It settles details the text
+leaves open: pooling stride 2 (the text says 1), nearest-neighbour upsampling followed by a $3\times3$ conv without
+BatchNorm, the order of concatenation, and the initialisation. It has 15,505,194 trainable parameters.
+\item \textbf{The released training code} does \emph{not} match either: a different U-Net with tanh and no BatchNorm, a
+learning rate of $10^{-5}$, 25 epochs and batch 16. It looks like an older version, so we ignored it.
+\item \textbf{Our adaptations}, listed below, each labelled as ours.
+\end{enumerate}
+So the architecture comes from the released model, and the training recipe from the paper.
+
+\section{The architecture}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=5mm and 9mm]
+\node[fixed] (in) {$B_x,B_y,B_z$\\$64\times64$};
+\node[block,right=of in] (e1) {3 blocks\\64};
+\node[block,right=of e1] (e2) {3 blocks\\128};
+\node[block,right=of e2] (e3) {3 blocks\\256};
+\node[block,right=of e3] (bt) {3 blocks\\512};
+\node[learned,above right=4mm and 8mm of bt] (dx) {Decoder for $J_x$};
+\node[learned,below right=4mm and 8mm of bt] (dy) {Decoder for $J_y$};
+\draw[flow] (in)--(e1);
+\draw[flow] (e1)--node[above,note]{pool}(e2);
+\draw[flow] (e2)--node[above,note]{pool}(e3);
+\draw[flow] (e3)--node[above,note]{pool}(bt);
+\draw[flow] (bt.north east)--(dx.south); \draw[flow] (bt.south east)--(dy.north);
+\draw[dashflow] (e2.north) |- (dx.west);
+\draw[dashed,draw=ink] (e3.north) -- (e3.north |- dx.west);
+\draw[dashflow] (e2.south) |- (dy.west);
+\draw[dashed,draw=ink] (e3.south) -- (e3.south |- dy.west);
+\node[note,above=1mm of e2.north |- dx.west,anchor=south west] {skips from the 128 and 256 levels};
+\end{tikzpicture}
+\caption{MAGIC-UNet. Each block is conv $3\times3$, BatchNorm and ReLU. The two decoders share the encoder but nothing
+else. The 64-channel skip is left out, as in the paper.}
+\end{figure}
+
+Each decoder level upsamples, applies a $3\times3$ conv, joins the encoder's skip, then normalises and applies two more
+blocks:
+
+\begin{code*}{magic_unet.py}
+    def forward(self, x, skip=None):
+        x = self.conv(self.up(x))
+        if self.skip:
+            x = torch.cat([skip, x], dim=1)     # Keras order: [encoder, upsampled]
+        return self.blocks(self.norm(x))
+\end{code*}
+
+\begin{code*}{magic_unet.py}
+    def forward(self, b):
+        s1 = self.enc1(b)
+        s2 = self.enc2(self.pool(s1))
+        s3 = self.enc3(self.pool(s2))
+        bottom = self.bottom(self.pool(s3))
+        return torch.cat([self.jx(bottom, s2, s3), self.jy(bottom, s2, s3)], dim=1)
+\end{code*}
+
+\begin{keyidea}[How we know it is exact]
+The test file compares every convolution, BatchNorm, pooling, upsampling and concatenation with the layer graph saved
+from the released model, in \code{tests/data/magic_unet_released_layers.json}. The parameter count is exactly
+15,505,194, and the size of all weights matches the released checkpoint to 0.15\%.
+\end{keyidea}
+
+\section{Scaling each image}
+
+Fields vary in strength by orders of magnitude, so every image is divided by its own largest field magnitude $\alpha$.
+The network therefore always sees values up to 1, and its output is multiplied back by $\alpha/\beta$:
+
+\begin{code*}{magic_unet.py}
+def alpha(b):
+    """Per-image scale of the paper: max over pixels of |B| (vector norm). b: [..., 3, H, W]."""
+    return b.pow(2).sum(-3).sqrt().amax((-2, -1))
+\end{code*}
+
+\begin{code*}{train_magic_unet.py}
+    a = alpha(b).clamp_min(1e-30)
+    x = b / a[:, None, None, None]
+    x = x + (sigma / a)[:, None, None, None] * unit_noise(x.shape, generator, corr_um)
+    y = j / a[:, None, None, None] * beta
+\end{code*}
+
+The noise is added after scaling, with strength $\sigma/\alpha$. Keep that line in mind: it caused the bug in
+Chapter~\ref{ch:magic_results}.
+
+\section{From current back to the field}
+
+Our goal is the field at 0.5\um, not the current. But predicting the current is the better route: once you have the
+current, exact physics gives the field at \emph{any} height. We use thin-sheet Biot--Savart in Fourier space:
+
+\begin{code*}{magic_unet.py}
+    fx, fy = np.fft.rfft2(jx), np.fft.rfft2(jy)
+    fz = 1j * (wy * fx - wx * fy) / safe
+    decay = 0.5 * MU0_UT * np.exp(-k * height)
+    return [np.fft.irfft2(f * decay, s=(ny, nx)) for f in (fx, fy, fz)]
+\end{code*}
+
+So the network never needs to know the 0.5\um\ target. It predicts the current, and the physics step does the rest.
+
+\section{Our adaptations}
+
+\begin{center}
+\small
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{4.3cm}X}
+\toprule
+Ours & Why \\
+\midrule
+Our current-layout simulator (spirals, meanders, mirrored arrays) & Their wires need COMSOL LiveLink. Each layout gets a
+random quarter turn and mirror, which gives their 8 augmentations physically. \\
+Standoff $3\pm0.6$\um, cut at $\pm3\sigma$ (1.2--4.8\um) & The same 20\% spread as their $50\pm10$\um, centred on our
+benchmark. Never given to the network. \\
+0.2\um\ pixels, $64\times64$ tiles (12.8\um) & Their image size. Simulated at 0.1\um, then averaged $2\times2$, like camera
+binning. \\
+Target: the equivalent sheet current $J_\text{eff}=J\,e^{-kd}$ & Our wires sit an unknown 0--0.2\um\ below the reference
+plane. $J_\text{eff}$ makes the field at every height exact. \\
+White noise at the simulator's 1--2.5\% & The paper does not give its training noise level. Never taken from COMSOL. \\
+$\beta = 0.1$ & Their $\beta\approx10^8$ is for SI units; ours are \textmu T and A/m. \\
+Field from current by Biot--Savart at 0.5\um & The paper stops at the current. \\
+Tile overlap chosen from strides 16, 32 and 48 & The paper does not state it. Chosen on simulated images, never on
+COMSOL. \\
+PyTorch, RMSprop with Keras defaults & Same optimiser maths as their TensorFlow version. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{The pipeline floor}
+
+Cutting the image into tiles and predicting a current costs something even when the network is perfect, because currents
+outside the image are missing. We measured this with the \emph{true} current on simulated layouts:
+
+\begin{center}
+\begin{tabular}{lc}
+\toprule
+Setup, perfect current & Error at 0.5\um \\
+\midrule
+True current, assuming the mean offset 0.1\um & 5.14\% \\
+$J_\text{eff}$ on the full canvas & 0.00\% \\
+$J_\text{eff}$ cropped to the image, 0.1\um\ pixels & 2.85\% \\
+$J_\text{eff}$ cropped, 0.2\um\ pixels (\textbf{used}) & 2.93\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The field-to-field methods (FISTA, CSC-LISTA, FISTA-Net) do not pay this 2.9\%; MAGIC-UNet does.
+
+\begin{careful}[An honest correction]
+At first I blamed the 0.2\um\ pixels for a 7.3\% floor. That was wrong. The real cause was forcing the cropped current to
+be divergence-free, which spreads the crop's error over the whole image. Plain Biot--Savart is linear, so the cropped
+current costs only the field of the missing outside currents. With that fix the floor is 2.9\%, and the pixel size barely
+matters.
+\end{careful}
+
+\begin{careful}[A difference in scale]
+Our tile is only about 4 times the standoff; theirs was about 40 times. So most of the field in each of our tiles comes
+from wires outside it. The paper never tested this regime.
+\end{careful}
+
+\begin{defend}[If your professor asks: did you change the network?]
+No. Every layer matches the authors' released model, checked by tests, with 15,505,194 parameters. The training recipe is
+the paper's. What we changed is the data and the scale, each listed as our adaptation, and the step from current back to
+field, which the paper does not have.
+\end{defend}

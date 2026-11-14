@@ -4,3 +4,5 @@ __pycache__/
 /presentations/
 .presentation-build/
 data3/
+COMSOL_params
+final_evaluation

@@ -1,0 +1,119 @@
+\chapter{The full research question}\label{ch:question}
+
+The one-standoff restart was a starting point, not the goal. On 7 November you restated the actual question:
+
+\begin{keyidea}[The research question]
+Can a physics-based learned inverse estimate unknown standoff and reconstruct near-plane QDM magnetic fields
+consistently across unseen geometries, fields of view and sampling scales?
+\end{keyidea}
+
+A paper on this would need to show:
+\begin{enumerate}
+\item joint standoff estimation and field reconstruction, with a distinct inference method;
+\item generalisation to unseen geometries, fields of view, pixel spacings and noise levels;
+\item how the method handles the ambiguity between source and height, for example with uncertainty or competing
+hypotheses;
+\item ideally, evidence on experimental QDM data.
+\end{enumerate}
+
+This chapter collects what we found when we looked at the question as a whole. Nothing in it was trained.
+
+\section{An exact ambiguity}
+
+Model the source as a thin current sheet at depth $h$ below the sensor. Every field component then has the form
+\begin{equation}
+B(k) = \tfrac{\mu_0}{2}\,e^{-kh}\,K(k)\,g(k),
+\end{equation}
+where $g$ describes the current and $K$ is a fixed factor that depends only on direction. Now move the sheet down by
+$\delta$ and make it sharper by $e^{k\delta}$:
+\begin{equation}
+e^{-k(h+\delta)}\,K(k)\,\big(g(k)\,e^{k\delta}\big) = e^{-kh}\,K(k)\,g(k).
+\end{equation}
+\textbf{The measurement is identical.} A source at depth $h$ and a sharper source at depth $h+\delta$ cannot be told apart
+from the field alone. Measuring $B_x$, $B_y$ and $B_z$ does not help, because all three share the same $e^{-kh}$.
+
+\begin{keyidea}[What follows from it]
+\begin{itemize}
+\item \textbf{The height cannot come from the field alone.} Only a prior on what sources look like (sharp wire edges,
+smooth currents, no ringing) can pick one depth.
+\item \textbf{The two hypotheses predict different near-plane fields.} So a wrong height directly spoils the
+reconstruction. Height and reconstruction are one problem.
+\item \textbf{Where the prior is weak, the honest answer is a set of heights,} each with its own reconstructed field.
+That is the direct answer to ``how do you handle the ambiguity''.
+\end{itemize}
+\end{keyidea}
+
+\begin{careful}
+``Standoff'' here means the \emph{effective} depth of the sheet. The thickness of the NV layer, the thickness of the
+conductor and the optical blur all add to it. A paper should report the physical gap and the effective depth separately.
+\end{careful}
+
+\section{Can the spectrum tell the height?}
+
+A tempting shortcut is to read the height off the slope of the field's power spectrum, since $|B|^2$ falls like
+$e^{-2kh}$. We tried it on our COMSOL pairs.
+\begin{itemize}
+\item \textbf{With the fitting band chosen using the true height} (cheating): IC\_4um came out 0.2--0.6\um\ too high, but
+L1\_C1 above 4\um\ came out 1--5\um\ too low; 10\um\ read as 5.2\um. The coil's own spectrum fights the exponential.
+\item \textbf{With the band chosen from the data alone:} every height above 3\um\ read as 0.9--2\um, because COMSOL's
+speckle is not white noise and leaks into the band.
+\end{itemize}
+Both failures are the ambiguity above in action: the answer depends on what the source looks like. The height has to
+come from a source prior together with the reconstruction.
+
+\section{What others have done}
+
+\begin{center}
+\small
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{4.2cm}X}
+\toprule
+Work & What it offers us \\
+\midrule
+NV practice (several papers) & Standoff fitted on a known feature: a wire profile, a film edge, a dipole. This is how
+the real QDM could be calibrated. \\
+Setescak et al.\ 2026 & Fits the sensor distance jointly with the magnetisation, using an energy prior. The closest prior
+work, but for magnetisation, not learned, and with no uncertainty. \\
+MAGIC-UNet, Reed et al.\ 2024 & A U-Net from field to current, trained over a range of standoffs that it is never told.
+Chapters~\ref{ch:magic} and~\ref{ch:magic_results}. \\
+Dubois et al.\ 2022 & An untrained network whose loss is the exact forward model. No training data, so no simulator gap. \\
+USRNet, DPIR & One unrolled network for many blur kernels, scales and noise levels, given the kernel. \\
+IKC, DAN & Alternate between estimating the blur and restoring the image. \\
+BlindDPS, Fast Diffusion EM & A diffusion prior on the image, with the blur parameters estimated alongside. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{keyidea}[The gap]
+We found no learned method that estimates the standoff jointly with the reconstruction, reports competing heights, or is
+tested across pixel spacing and field of view. The blind-deblurring literature has the machinery; nobody has applied it to
+magnetic imaging. Our blur has only one unknown, the height, so a much more careful treatment is possible than in general
+blind deblurring.
+\end{keyidea}
+
+\begin{careful}[Where these summaries come from]
+Some entries were read in full; others come only from abstracts. Read the full papers before quoting any of them. The
+survey with sources is \code{RESEARCH_BEYOND_ISTA.md}.
+\end{careful}
+
+\section{A candidate method, and the first test}
+
+One design that fits the question:
+\begin{enumerate}
+\item For each candidate depth $h_j$ on a grid, run one shared reconstructor that is told $h_j$.
+\item Score each pair $(h_j, x_j)$ by how well it fits the data and how plausible the source is.
+\item Report the spread of supported heights, with one field for each. Give a single answer only when one height clearly
+wins.
+\item Refine the height around the best candidate.
+\end{enumerate}
+Every component of this is published (USRNet, DAN, BlindDPS); the combination and the treatment of the ambiguity would be
+new. That keeps the professor's rule: published parts and baselines, with a clearly labelled contribution.
+
+Before building any of it, one cheap check decides whether joint estimation can work at all. On COMSOL, fit a regularised
+current at each candidate height and see whether the best fit lands on the true height. If no prior puts the minimum near
+the truth, the height must be calibrated externally, and that is itself a result. This check has not been run yet.
+
+\begin{defend}[If your professor asks: why not just estimate the height from the data?]
+Because the data alone cannot fix it. A source at depth $h$ and a sharper one deeper down give exactly the same field. Our
+spectral test on COMSOL confirmed it: the estimates were off by up to 5\um. Height can only come from a prior on sources,
+and the method has to say how sure it is.
+\end{defend}

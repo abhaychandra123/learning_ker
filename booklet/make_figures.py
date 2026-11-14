@@ -349,6 +349,103 @@ def figure_schedules():
     save(fig, 'schedules')
 
 
+# ----------------------------------------------------------------- after 5 November
+
+SCORES_NOW = (
+    ('Wiener', 49.3, MUTED),
+    ('Strict Eq. 20, 64, 8,000 layouts', 36.0, BLUE),
+    ('Strict Eq. 20, 64, relative loss, 8,000', 36.2, BLUE),
+    ('Strict Eq. 20, 64, relative loss', 35.6, BLUE),
+    ('Strict Eq. 20, 64 (5 November)', 33.8, BLUE),
+    ('FISTA-Net, run 2', 33.3, BLUE),
+    ('FISTA-300, $\\lambda$ 0.009', 30.5, ORANGE),
+    ('MAGIC-UNet, run 2 (standoff not given)', 27.0, AQUA),
+)
+
+
+def figure_results_now():
+    fig, ax = plt.subplots(figsize=(7.2, 3.2))
+    y = np.arange(len(SCORES_NOW))
+    values = [s[1] for s in SCORES_NOW]
+    ax.barh(y, values, color=[s[2] for s in SCORES_NOW], height=.66)
+    for i, value in enumerate(values):
+        ax.text(value + .6, i, f'{value:.1f}%', va='center', fontsize=8)
+    ax.set_yticks(y, [s[0] for s in SCORES_NOW])
+    ax.invert_yaxis()
+    ax.set_xlim(0, 58)
+    ax.grid(axis='y', visible=False)
+    ax.set_xlabel('COMSOL relative $L_2$, 3 to 0.5 µm, mean of 15 pairs (%). Lower is better.')
+    save(fig, 'results_now')
+
+
+def figure_magic_history(magic):
+    fig, (a, b) = plt.subplots(1, 2, figsize=(7.2, 2.6), sharey=True)
+    for ax, run, title in ((a, 'history_run', 'Run 1: noise set per layout'),
+                           (b, 'history_run2', 'Run 2: noise set per crop')):
+        h = magic[run]
+        ax.semilogy(h[:, 0], h[:, 1], color=BLUE, label='Training loss (batch statistics)')
+        ax.semilogy(h[:, 0], h[:, 2], color=ORANGE, label='Validation loss (stored statistics)')
+        ax.set_title(title)
+        ax.set_xlabel('Epoch')
+    a.set_ylabel('MSE on scaled current')
+    b.legend(fontsize=7, loc='upper right')
+    save(fig, 'magic_history')
+
+
+def figure_magic_reconstruction(data, magic):
+    target = data['target']
+    new = dict(np.load(DATA / 'booklet_new.npz'))
+    run2 = np.load(DATA / 'booklet_run2.npz')['fista_net_2']
+    panels = (('FISTA-300, $\\lambda$ 0.009', new['fista300']), ('FISTA-Net, run 2', run2),
+              ('MAGIC-UNet, run 2', magic['magic_run2']))
+    limit = np.percentile(np.abs(target), 99.8)
+    fig, axes = plt.subplots(2, 4, figsize=(7.2, 3.9))
+    axes[0, 0].imshow(target, cmap=SIGNED, vmin=-limit, vmax=limit, origin='lower')
+    axes[0, 0].set_title('Target (COMSOL, 0.5 µm)', fontsize=8)
+    bare(axes[0, 0])
+    bare(axes[1, 0])
+    axes[1, 0].text(.5, .5, 'Error maps\n(same colour scale,\nsmaller is better)', ha='center',
+                    va='center', fontsize=8, color=MUTED, transform=axes[1, 0].transAxes)
+    for top, low, (title, image) in zip(axes[0, 1:], axes[1, 1:], panels):
+        top.imshow(image, cmap=SIGNED, vmin=-limit, vmax=limit, origin='lower')
+        top.set_title(title, fontsize=8)
+        bare(top)
+        low.imshow(image - target, cmap=SIGNED, vmin=-limit, vmax=limit, origin='lower')
+        score = 100 * np.linalg.norm(image - target) / np.linalg.norm(target)
+        low.set_title(f'{score:.1f}% on this crop', fontsize=8)
+        bare(low)
+    fig.tight_layout()
+    save(fig, 'magic_reconstruction')
+
+
+# Lost-band floor per pair, RESEARCH_BEYOND_ISTA.md section 2 (mean of Bx, By, Bz).
+FLOOR = {'L1_C1': {1: 17.5, 2: 21.0, 3: 33.4, 4: 39.8, 5: 41.3, 6: 42.6, 7: 44.8, 8: 47.4, 9: 53.6, 10: 56.0},
+         'IC_4um': {3: 35.6, 4: 42.6, 5: 52.4, 6: 58.2, 7: 65.4, 10: 73.5}}
+
+
+def figure_magic_standoff(magic):
+    z_in, z_tg = magic['comsol_z_in'], magic['comsol_z_target']
+    config, error = magic['comsol_config'], 100 * magic['comsol_error']
+    fig, axes = plt.subplots(1, 2, figsize=(7.2, 2.8), sharey=True)
+    for ax, name in zip(axes, ('L1_C1', 'IC_4um')):
+        keep = (config == name) & (z_tg == 0.5)
+        heights = np.unique(z_in[keep])
+        mean = [error[keep & (z_in == h)].mean() for h in heights]
+        ax.axvspan(1.2, 4.8, color=GRID, zorder=0)
+        ax.text(3, 97, 'trained\nstandoffs', ha='center', va='top', fontsize=7, color=MUTED)
+        floor = FLOOR[name]
+        ax.plot(list(floor), list(floor.values()), 's--', color=MUTED, ms=3.5, lw=1.2,
+                label='Lost-band floor (linear limit)')
+        ax.plot(heights, mean, 'o-', color=AQUA, ms=4, label='MAGIC-UNet run 2')
+        ax.set_title(name)
+        ax.set_xlabel('Input standoff (µm), target 0.5 µm')
+        ax.set_xticks(range(1, 11))
+        ax.set_ylim(0, 100)
+    axes[0].set_ylabel('COMSOL error (%)')
+    axes[0].legend(fontsize=7, loc='lower right')
+    save(fig, 'magic_standoff')
+
+
 def main():
     data = dict(np.load(DATA / 'booklet_export.npz'))
     figure_filters()
@@ -365,6 +462,11 @@ def main():
     figure_depth()
     figure_fistanet()
     figure_schedules()
+    magic = dict(np.load(DATA / 'booklet_magic.npz'))
+    figure_results_now()
+    figure_magic_history(magic)
+    figure_magic_reconstruction(data, magic)
+    figure_magic_standoff(magic)
 
 
 if __name__ == '__main__':
