@@ -86,8 +86,8 @@ def load(source):
         return z[key].astype(np.float64)
 
 
-def discover(run, data3):
-    """Every <name>_z<in>_to_z<target>.npz in <run>/comparison, plus data3 at 3 -> 0.5."""
+def discover(run, data3, heights=(3.0,)):
+    """Every <name>_z<in>_to_z<target>.npz in <run>/comparison, plus data3 at each height -> 0.5."""
     pairs = []
     for path in sorted((Path(run) / 'comparison').glob('*.npz')):
         m = PAIR_FILE.match(path.name)
@@ -98,9 +98,11 @@ def discover(run, data3):
     if data3 is not None:
         for config in DATA3:
             stem = Path(data3) / f'Coil_{config}' / f'L1_{config}'
-            pairs.append(Pair(config, SHAPE[config], 3.0, 0.5,
-                              (Path(f'{stem}_Z0p5um_600uA_0p1PR_MF_B.csv'), None),
-                              (Path(f'{stem}_Z3p0um_600uA_0p1PR_MF_B.csv'), None)))
+            for h in heights:
+                tag = f'{h:.1f}'.replace('.', 'p')
+                pairs.append(Pair(config, SHAPE[config], float(h), 0.5,
+                                  (Path(f'{stem}_Z0p5um_600uA_0p1PR_MF_B.csv'), None),
+                                  (Path(f'{stem}_Z{tag}um_600uA_0p1PR_MF_B.csv'), None)))
     return pairs
 
 

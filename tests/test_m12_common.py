@@ -92,6 +92,21 @@ class Height(unittest.TestCase):
             self.assertFalse(edge)
 
 
+    def test_read_height_wider_grid(self):
+        """The 10 um runs read heights up to 20 um; the default grid (12 um) flags such a height as an edge."""
+        n, pad = 96, 64
+        j = sheet(n)
+        spectra, k, shape = mc.sheet_spectra(j, pad)
+        b = mc.field_at(spectra, k, shape, 14.3, n, pad)
+        h, misfit, edge = mc.read_height(lambda hs: mc.height_misfit(j, b, hs, pad), h_max=20.0)
+        self.assertAlmostEqual(h, 14.3, places=2)
+        self.assertFalse(edge)
+        h, _, edge = mc.read_height(lambda hs: mc.height_misfit(j, b, hs, pad))
+        self.assertTrue(edge)
+        self.assertEqual(len(mc.coarse_heights(12.0)), len(mc.COARSE_HEIGHTS))
+        self.assertAlmostEqual(float(mc.coarse_heights(20.0)[-1]), 20.0)
+
+
 class Cutoff(unittest.TestCase):
     def test_consistent_field_has_no_inconsistent_part(self):
         # Field of a divergence-free sheet on the whole periodic canvas: no truncation, so the

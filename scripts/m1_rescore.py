@@ -112,10 +112,10 @@ def current(model, beta, factor, stride, b, device):
     return np.kron(j, np.ones((1, factor, factor)))
 
 
-def read_height(sheet, b, device):
+def read_height(sheet, b, device, h_max=mc.EDGE[1]):
     b32 = torch.as_tensor(np.asarray(b, np.float32), device=device)
     b_norm = (b32 ** 2).sum((-2, -1)).sqrt()
-    return mc.read_height(lambda hs: sheet.misfit(hs, b32, b_norm))
+    return mc.read_height(lambda hs: sheet.misfit(hs, b32, b_norm), h_max)
 
 
 # ---------------------------------------------------------------- simulation
@@ -155,6 +155,12 @@ def main():
     p.add_argument('--workers', type=int, default=16)
     p.add_argument('--standoffs', type=float, nargs='+', default=list(mc.SIM_STANDOFFS))
     p.add_argument('--gate-only', action='store_true')
+    p.add_argument('--data3-heights', type=float, nargs='+', default=[3.0],
+                   help='data3 input heights to pair with the 0.5 um plane')
+    p.add_argument('--comsol-z-inputs', type=float, nargs='+',
+                   help='Only score COMSOL pairs with these input heights (default: all)')
+    p.add_argument('--save-z-input', type=float, default=3.0, help='Save COMSOL predictions at this input height')
+    p.add_argument('--height-max', type=float, default=mc.EDGE[1], help='Top of the height read-out grid (um)')
     p.add_argument('--device', default='cuda')
     args = p.parse_args()
     out = Path(args.output)
@@ -179,8 +185,11 @@ def main():
         log(run, 'stride', stride, 'beta', beta, 'bin', factor)
 
     # 1. reproduction gate on COMSOL (raw scores only)
-    pairs = discover(args.comparison_run, args.data3)
+    pairs = discover(args.comparison_run, args.data3, tuple(args.data3_heights))
+    if args.comsol_z_inputs:
+        pairs = [q for q in pairs if q.z_in in args.comsol_z_inputs]
     data = {(q.name, q.z_in, q.z_tg): (q, load(q.sharp), load(q.blurred)) for q in pairs}
+    unsaved = 0
     currents, gate = {}, []
     for run, (model, beta, factor, stride) in models.items():
         saved = {(r['config'], float(r['z_input']), float(r['z_target']), r['component']): float(r['relative_l2'])
@@ -190,14 +199,17 @@ def main():
             currents[run, key] = j
             raw = rel(Sheet(j, device).field64(q.z_tg), torch.as_tensor(sharp, device=device))
             for c, comp in enumerate(COMPONENTS):
-                ref = saved[(q.name, q.z_in, q.z_tg, comp)]
+                ref = saved.get((q.name, q.z_in, q.z_tg, comp))
+                if ref is None:             # a pair the run's own evaluation never scored (older runs, data3 at 10 um)
+                    unsaved += 1
+                    continue
                 gate.append(dict(run=run, config=q.name, z_input=q.z_in, z_target=q.z_tg, component=comp,
                                  saved=ref, rerun=float(raw[c]), diff=float(raw[c] - ref)))
     write_csv(out / 'gate.csv', gate)
     worst = max(abs(g['diff']) for g in gate)
-    log('gate: worst |rerun - saved| =', worst)
+    log('gate: worst |rerun - saved| =', worst, 'over', len(gate), 'rows;', unsaved, 'rows had no saved score')
     # float32 read-out against the float64 NumPy reference, on one pair and three heights
-    key = ('L1_C1', 3.0, 0.5)
+    key = ('L1_C1', 3.0, 0.5) if ('L1_C1', 3.0, 0.5) in data else next(iter(data))
     j = currents[args.runs[0], key]
     b = data[key][2]
     sheet = Sheet(j, device)
@@ -208,6 +220,7 @@ def main():
     precision = float(np.abs(m32 - m64).max())
     log('read-out float32 vs float64 NumPy, max misfit difference', precision)
     (out / 'gate.json').write_text(json.dumps(dict(worst_abs_diff=worst, passed=bool(worst <= 1e-4),
+                                                   rows_compared=len(gate), rows_without_saved_score=unsaved,
                                                    readout_precision=precision), indent=2))
     if worst > 1e-4:
         raise SystemExit('reproduction gate failed; stopping (protocol)')
@@ -229,7 +242,7 @@ def main():
                 pred = sheet.field64(0.5)
                 t = torch.as_tensor(target.astype(np.float64), device=device)
                 raw = rel(pred, t)
-                h, misfit, edge = read_height(sheet, b, device)
+                h, misfit, edge = read_height(sheet, b, device, args.height_max)
                 corr = Corrector(pred.cpu().numpy(), b, z - 0.5, device)
                 for m, mu in enumerate(mc.MU_GRID):
                     errors[i, m] = rel(corr(float(mu)), t)
@@ -275,7 +288,7 @@ def main():
             j = currents[run, key]
             sheet = Sheet(j, device)
             pred = sheet.field64(q.z_tg).cpu().numpy()
-            h, misfit, edge = read_height(sheet, blurred, device)
+            h, misfit, edge = read_height(sheet, blurred, device, args.height_max)
             mu_true = mc.mu_at(q.z_in, args.standoffs, mu_curve[run])
             mu_est = mc.mu_at(h, args.standoffs, mu_curve[run])
             variants = dict(raw=pred,
@@ -287,11 +300,11 @@ def main():
                     rows.append(dict(run=run, variant=name, config=q.name, shape=mc.SHAPE[q.name],
                                      z_input=q.z_in, z_target=q.z_tg, component=comp, h_star=h, misfit=misfit,
                                      edge=edge, mu_true=mu_true, mu_est=mu_est, **four[c]))
-                if q.z_in == 3.0 and q.z_tg == 0.5:
+                if q.z_in == args.save_z_input and q.z_tg == 0.5:
                     saved_pred[f'{run}_{name}_{q.name}'] = field.astype(np.float32)
             log(f'COMSOL {run} {q.name} {q.z_in}->{q.z_tg}: h* {h:.2f}')
     write_csv(out / 'comsol.csv', rows)
-    np.savez_compressed(out / 'comsol_3_to_05_predictions.npz', **saved_pred)
+    np.savez_compressed(out / f'comsol_{args.save_z_input:g}_to_05_predictions.npz', **saved_pred)
     log('done')
 
 

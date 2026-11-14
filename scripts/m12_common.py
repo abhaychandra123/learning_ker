@@ -92,19 +92,25 @@ def height_misfit(j, b, heights, pad=700, dx=DX):
                      for h in heights])
 
 
-def read_height(misfit_fn):
+def coarse_heights(h_max):
+    """The M1a coarse grid 0.5, 0.6, ..., h_max um (h_max = 12 in M1; 20 for the 10 um runs)."""
+    return np.round(np.arange(0.5, h_max + 1e-4, 0.1), 2)
+
+
+def read_height(misfit_fn, h_max=EDGE[1]):
     """Coarse grid, then a 0.01 um grid over +-0.1 um around the coarse minimum. Returns (h*, misfit, edge).
 
-    misfit_fn maps an array of heights to an array of misfits.
+    misfit_fn maps an array of heights to an array of misfits. The grid runs from 0.5 um to h_max.
     """
-    coarse = misfit_fn(COARSE_HEIGHTS)
-    h0 = COARSE_HEIGHTS[int(np.argmin(coarse))]
+    grid, lo = coarse_heights(h_max), EDGE[0]
+    coarse = misfit_fn(grid)
+    h0 = grid[int(np.argmin(coarse))]
     fine_h = np.round(np.arange(h0 - FINE_HALF, h0 + FINE_HALF + 1e-9, FINE_STEP), 3)
-    fine_h = fine_h[(fine_h >= EDGE[0]) & (fine_h <= EDGE[1])]
+    fine_h = fine_h[(fine_h >= lo) & (fine_h <= h_max)]
     fine = misfit_fn(fine_h)
     i = int(np.argmin(fine))
     h = float(fine_h[i])
-    edge = bool(h <= EDGE[0] + 0.1 or h >= EDGE[1] - 0.1)
+    edge = bool(h <= lo + 0.1 or h >= h_max - 0.1)
     return h, float(fine[i]), edge
 
 

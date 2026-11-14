@@ -221,3 +221,36 @@ IC_4um stays at 52–55% across 3–7 µm. The IC 2 → 1 µm pair was not check
 **Earlier.** Locally only the unit tests and a plumbing smoke test ran (4 layouts, a few minutes): training
 loss fell, but the model overfits 4 layouts, so its scores mean nothing. A mid-size pilot belongs on the
 server; it was started locally by mistake and stopped.
+
+## High-standoff runs at 10 → 0.5 µm (launched 14 November 2026, 07:04 server time)
+
+Rules fixed before launch: [HIGH_STANDOFF_PROTOCOL.md](HIGH_STANDOFF_PROTOCOL.md) (hash in
+`runs/magic_unet/protocol_10um_sha256.txt` on the server). No results yet.
+
+| | Run A, `run10a` (control) | Run B, `run10b` |
+|---|---|---|
+| Standoff | N(10, 2) µm, cut at 4–16 µm, never given | same |
+| Pixels, tile | 0.2 µm, 64×64 = 12.8 µm | 0.7 µm (7×7 average), 64×64 = 44.8 µm |
+| Crops | 4,800 layouts × 4 standoffs × 8 = 153,600; validation 128 layouts, 4,096 | same layouts and standoffs |
+| Data | `runs/magic_unet/data10a` | `runs/magic_unet/data10b` |
+
+Everything else is run 2's recipe: same network, paper training recipe, free-space simulator, per-crop noise, seed 0.
+Run B waits for `runs/magic_unet/run10a.done` before training, so the two never share the GPU. Frozen code:
+`experiments/magic_unet_10um` (17/17 tests; network, simulator and data code byte-identical to run 3's copy). Logs:
+`logs/magic_unet_run10{a,b}.launch.log`, `runs/magic_unet/run10{a,b}.log`.
+
+Why these two (measured 14 November, no training): the share of a tile's field that comes from currents outside the
+tile is 50% for run 2 (3 µm, 12.8 µm tile), 78% at run A's setting and 52% at run B's. A perfect current costs 2.2%
+at 0.2 µm pixels and 4.6% at 0.7 µm. Run 3 on simulation still scores 36.1% at 8 µm with 12.8 µm tiles and breaks at
+10 µm (56.8%), the edge of its training range, so the band is centred on 10 µm.
+
+Code changes for these runs: `train_magic_unet.py` gained `--sim-z-input` (score the simulated validation layouts at
+another input height), `--data3-heights` and `--save-z-input`; `wiener_oracle.discover` takes the data3 heights;
+`hpc/run_magic_unet.sh` puts `QDM_DATA_ARGS`/`QDM_TRAIN_ARGS` last so they override defaults, and can queue behind
+another run (`QDM_WAIT_FOR`). Launch variables:
+`QDM_DATA=data10a QDM_RUN=run10a QDM_DATA_ARGS="--bin 2 --standoffs 4 --crops-per-standoff 8 --z-mean 10 --z-std 2"
+QDM_TRAIN_ARGS="--z-mean 10 --z-std 2 --sim-z-input 10 --data3-heights 3 10 --save-z-input 10"`; run B uses
+`--bin 7`, `data10b`, `run10b` and `QDM_WAIT_FOR=$HOME/learning_ker/runs/magic_unet/run10a.done`.
+
+Still to do before scoring the full comparison: extend `m1_rescore.py` (height grid to 20 µm, simulated standoffs
+6–14 µm, data3 at 10 µm) and `m2_fista_depth.py` (operator 9.5 µm, simulated crops at 10 µm) as the protocol says.

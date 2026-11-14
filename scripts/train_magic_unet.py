@@ -183,27 +183,29 @@ def comsol(model, beta, factor, stride, args, device, output):
     data3 = args.data3 if args.data3 and Path(args.data3).exists() else None
     rows, saved = [], {}
     lo, hi = args.z_range or (args.z_mean - 3 * args.z_std, args.z_mean + 3 * args.z_std)
-    for pair in discover(args.comparison_run, data3):
+    for pair in discover(args.comparison_run, data3, tuple(args.data3_heights)):
         sharp, blurred = load(pair.sharp), load(pair.blurred)
         b, j = reconstruct(model, beta, blurred, pair.z_tg, factor, args, stride, device)
         for c, name in enumerate(COMPONENTS):
             rows.append(dict(config=pair.name, z_input=pair.z_in, z_target=pair.z_tg, component=name,
                              in_training_spread=bool(lo <= pair.z_in <= hi),
                              relative_l2=relative_l2(b[c], sharp[c])))
-        if pair.z_in == 3.0 and pair.z_tg == 0.5:
+        if pair.z_in == args.save_z_input and pair.z_tg == 0.5:
             saved[pair.name] = dict(J=j[:, ::factor, ::factor].astype(np.float32),
                                     B=b.astype(np.float32))
     with (output / 'comsol.csv').open('w', newline='') as stream:
         writer = csv.DictWriter(stream, fieldnames=list(rows[0]))
         writer.writeheader()
         writer.writerows(rows)
-    np.savez_compressed(output / 'comsol_3_to_05_predictions.npz',
+    np.savez_compressed(output / f'comsol_{args.save_z_input:g}_to_05_predictions.npz',
                         **{f'{k}_{a}': v[a] for k, v in saved.items() for a in v})
     return rows
 
 
 def evaluate(model, beta, factor, args, device, output):
     sim = SimulatedDataset(args.sim_dataset)
+    if args.sim_z_input:        # same validation layouts and noise seeds, rendered at another input height
+        sim.settings = dict(sim.settings, z_input=float(args.sim_z_input))
     recipes = sim.recipes('validation')[:args.val_layouts]
     pick = recipes[:args.stride_layouts]
     strides = {s: score_simulated(model, beta, factor, sim, pick, s, args, device)
@@ -217,6 +219,7 @@ def evaluate(model, beta, factor, args, device, output):
         writer.writeheader()
         writer.writerows(rows)
     result = dict(stride_trials=strides, stride=stride,
+                  sim_z_input=sim.settings['z_input'], sim_z_target=sim.settings['z_target'],
                   sim_validation_relative_l2=sim_mean,
                   sim_validation_layouts=len(recipes),
                   sim_J={k: float(np.mean([r[k] for r in rows]))
@@ -257,6 +260,12 @@ def parser():
     p.add_argument('--comparison-run', default='runs/combined_full_200')
     p.add_argument('--data3', default='data/data3')
     p.add_argument('--no-comsol', action='store_true')
+    p.add_argument('--sim-z-input', type=float,
+                   help='Render the simulated validation layouts at this input height (default: the dataset\'s)')
+    p.add_argument('--data3-heights', type=float, nargs='+', default=[3.0],
+                   help='data3 input heights to score against the 0.5 um plane')
+    p.add_argument('--save-z-input', type=float, default=3.0,
+                   help='Save COMSOL predictions for pairs with this input height')
     p.add_argument('--z-mean', type=float, default=3.0, help='Training standoff mean (labels only)')
     p.add_argument('--z-std', type=float, default=0.6, help='Training standoff std (labels only)')
     p.add_argument('--z-range', type=float, nargs=2, metavar=('LO', 'HI'),

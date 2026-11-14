@@ -169,6 +169,42 @@ class Data(unittest.TestCase):
         a = np.sqrt((b ** 2).sum(1)).max((1, 2))
         self.assertTrue(np.all(sigma / a <= 2 * max(DEFAULTS['noise_percent']) / 100 + 1e-9))
 
+    def test_ten_micron_layout(self):
+        """0.7 um pixels (bin 7), standoff 10 +- 2 um cut at 3 standard deviations."""
+        from magic_data import layout_crops
+        from simulate_fields import DEFAULTS
+        cfg = dict(crop=64, bin=7, standoffs=4, crops_per_standoff=2, z_mean=10.0, z_std=2.0,
+                   z_trunc=3.0, empty_fraction=0.0)
+        b, j, z, sigma, meta = layout_crops(('magic_test_000002', 0, dict(DEFAULTS), cfg))
+        self.assertEqual(b.shape, (8, 3, 64, 64))
+        self.assertEqual(j.shape, (8, 2, 64, 64))
+        self.assertTrue(np.all((z >= 4.0) & (z <= 16.0)), z)
+        a = np.sqrt((b ** 2).sum(1)).max((1, 2))
+        self.assertTrue(np.all(sigma / a <= 2 * max(DEFAULTS['noise_percent']) / 100 + 1e-9))
+
+    def test_same_standoffs_for_both_pixel_sizes(self):
+        """Runs A and B (bin 2 and bin 7) must see the same layouts at the same standoffs."""
+        from magic_data import layout_crops
+        from simulate_fields import DEFAULTS
+        zs = []
+        for b in (2, 7):
+            cfg = dict(crop=64, bin=b, standoffs=2, crops_per_standoff=1, z_mean=10.0, z_std=2.0,
+                       z_trunc=3.0, empty_fraction=0.0)
+            zs.append(layout_crops(('magic_test_000003', 0, dict(DEFAULTS), cfg))[2])
+        np.testing.assert_allclose(zs[0], zs[1])
+
+    def test_data3_heights(self):
+        import tempfile
+        from wiener_oracle import discover
+        with tempfile.TemporaryDirectory() as root:
+            (Path(root) / 'comparison').mkdir()
+            default = discover(root, 'data3')
+            both = discover(root, 'data3', (3.0, 10.0))
+        self.assertEqual({(p.z_in, p.z_tg) for p in default}, {(3.0, 0.5)})
+        self.assertEqual(len(both), 2 * len(default))
+        self.assertTrue(any('Z10p0um' in str(p.blurred[0]) for p in both))
+        self.assertTrue(all('Z0p5um' in str(p.sharp[0]) for p in both))
+
 
 if __name__ == '__main__':
     unittest.main()
