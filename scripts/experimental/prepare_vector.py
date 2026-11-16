@@ -92,9 +92,17 @@ def main():
         d, m = f["data"], f["full_mask"]
         X, Y = np.meshgrid(f["X"], f["Y"])
         med = ndimage.generic_filter(np.where(m, d, np.nan), np.nanmedian, 5, mode="nearest")
-        clean = np.where(m, d, med)
-        bg = sum(c*b for c, b in zip(fit["background_uT"], fc.background_cols(X, Y)))
+        # Background: refit on the FULL image with the fitted coil signal held fixed. (The window fit's own
+        # background is only valid inside the window; extrapolating its plane across 165 um creates false fields.)
+        cols = fc.background_cols(X, Y)
+        A = np.stack([c[m] for c in cols], 1)
+        bgc, *_ = np.linalg.lstsq(A, (d - f["signal"])[m], rcond=None)
+        bg = sum(c*b for c, b in zip(bgc, cols))
+        fit = dict(fit, background_full_uT=[float(v) for v in bgc])
+        clean =np.where(m, d, np.where(np.isfinite(med), med, bg))   # fully masked patches -> background
         b = clean - bg
+        if len(sys.argv) > 3:                                          # optional common NV axis "theta,phi" (deg)
+            fit = dict(fit, nv_theta_deg=float(sys.argv[3].split(",")[0]), nv_phi_deg=float(sys.argv[3].split(",")[1]))
         th, ph = np.deg2rad(fit["nv_theta_deg"]), np.deg2rad(fit["nv_phi_deg"])
         u = fc.unit(th, ph)
         spectra, n = nv_to_vector(b, u)
@@ -106,8 +114,7 @@ def main():
         arrays[f"{case}_bnv_clean"] = b.astype(np.float32)
         arrays[f"{case}_ref_j"] = j.astype(np.float32)
         arrays[f"{case}_ref_f05"] = f05.astype(np.float32)
-        arrays[f"{case}_ref_fh"] = fh.astype(np.float32)
-        meta[case] = dict(u=u.tolist(), standoff_fit_um=fit["standoff_um"], current_fit_uA=fit["current_uA"],
+        meta[case] = dict(background_full_uT=fit["background_full_uT"], u=u.tolist(), standoff_fit_um=fit["standoff_um"], current_fit_uA=fit["current_uA"],
                           centre_um=fit["centre_um"], orientation=fit["orientation"])
         print(case, "input max |B|", float(np.abs(model_frame).max()), "uT; ref max |J|", float(np.abs(j).max()), "A/m")
     np.savez_compressed(out, meta=json.dumps(meta), **arrays)

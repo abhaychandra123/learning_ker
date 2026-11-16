@@ -95,6 +95,13 @@ back. Booklet figure data is cached in `booklet/data/*.npz`.
 
 ## 5. The high-standoff plan (your main work for the next days)
 
+> **Update, 17 November.** The 10 µm results are in
+> `final_evaluation/02_source_docs/p9_high_standoff/README_HIGH_STANDOFF.md`. When presenting them, the comparison with
+> CSC-LISTA and FISTA-Net is **not like-for-like**: only MAGIC-UNet was adapted to the 10 µm scale (0.7 µm pixels, a
+> 44.8 µm view); the other two kept their 3 µm settings (view, depth, penalty, data), so their 10 µm failure says their
+> 3 µm configurations do not transfer, not that the architectures cannot work. Without scale adaptation no learned
+> method beats FISTA on average (§7.3 of that README).
+
 ### 5.1 What the evidence already says about 10 µm
 
 - **Most of the 0.5 µm field is not in a 10 µm measurement.** Information-budget floor: 56% (L1_C1) and 73.5% (IC_4um)

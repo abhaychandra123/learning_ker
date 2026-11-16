@@ -89,7 +89,8 @@ At 3\um\ to 0.5\um, MAGIC-UNet, the unmodified network of Reed et al.\ trained o
 standoff, scores 24.3\% on COMSOL with one data-consistency step that we added, against 26.9\% for FISTA run to its best
 depth (925 iterations); it wins for all three seeds on the 15 pairs and is not distinguishable from FISTA on the IC coil. At 10\um, with
 a tile scaled to the blur, it scores 15.8\% on new simulated layouts against FISTA's 48.8\%, but on COMSOL FISTA is ahead,
-54.3\% against 59.3\%. Every score is an error, so lower is better.
+54.3\% against 59.3\%. Only MAGIC-UNet was adapted to the 10\um\ scale, so that comparison with the other learned
+methods is not like-for-like (Section~\ref{sec:fair}). Every score is an error, so lower is better.
 
 \section*{How to use this booklet}
 

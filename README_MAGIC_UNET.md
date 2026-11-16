@@ -229,7 +229,9 @@ Rules fixed before launch: [HIGH_STANDOFF_PROTOCOL.md](HIGH_STANDOFF_PROTOCOL.md
 [final_evaluation/02_source_docs/p9_high_standoff/README_HIGH_STANDOFF.md](final_evaluation/02_source_docs/p9_high_standoff/README_HIGH_STANDOFF.md).
 In short, at 10 → 0.5 µm: on simulation MAGIC-UNet (run B, 44.8 µm tile, with the data-consistency step) 15.8%,
 FISTA 48.8%, CSC-LISTA with its 3 µm settings 91.8%, and run A (12.8 µm tile) 58.2%; on COMSOL FISTA 54.3%,
-MAGIC-UNet 59.3%, CSC-LISTA 98.1%. FISTA-Net at 10 µm was still training on 16 November.
+MAGIC-UNet 59.3%, CSC-LISTA 98.1%. FISTA-Net at 10 µm was still training on 16 November. Not like-for-like: only
+MAGIC-UNet was adapted to the 10 µm scale (0.7 µm pixels); CSC-LISTA and FISTA-Net kept their 3 µm settings, so their
+10 µm scores show that those configurations do not transfer, not that the architectures cannot work (README_HIGH_STANDOFF.md §7.3).
 
 | | Run A, `run10a` (control) | Run B, `run10b` |
 |---|---|---|

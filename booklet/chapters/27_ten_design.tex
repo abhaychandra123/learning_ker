@@ -192,6 +192,9 @@ pixel size is the reason, and nothing else can be.
 The network and the training recipe are the paper's. The two pixel sizes and the split into 4{,}800 layouts with 8 crops
 per standoff are our choices. Run 2 used 2{,}400 layouts with 16 crops per standoff; the total number of crops is the
 same, 153{,}600.
+
+The pixel-size change was made for MAGIC-UNet only. When CSC-LISTA and FISTA-Net were later run at 10\um, they kept
+their 3\um\ settings, so the 10\um\ method comparison is not like-for-like (Section~\ref{sec:fair}).
 \end{careful}
 
 \section{The rules, written first}

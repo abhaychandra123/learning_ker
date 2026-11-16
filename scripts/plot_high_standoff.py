@@ -26,8 +26,10 @@ COLOR = dict(magic='#2a78d6', fista='#eb6834', fista_net='#1baf7a', csc_lista='#
 NAME = dict(run10b='MAGIC-UNet, 44.8 µm tile (run B)', run10a='MAGIC-UNet, 12.8 µm tile (run A)',
             run3='Run 3 (12.8 µm tile, trained on 1–10 µm)', run2='Run 2 (12.8 µm tile, trained at 3 µm)')
 MARKER = dict(run10b='o', run10a='s', run3='^', run2='D')
-EXTRA = (('fista_net', 'FISTA-Net'), ('csc_lista', 'CSC-LISTA'))      # shown once their 10 um runs exist
-MAGIC_NOTE = 'MAGIC-UNet: run B (0.7 µm pixels)\nwith the data-consistency step.'
+# shown once their 10 um runs exist; they kept their 3 um settings, so every figure says so (not like-for-like)
+EXTRA = (('fista_net', 'FISTA-Net (3 µm settings)'), ('csc_lista', 'CSC-LISTA (3 µm settings)'))
+MAGIC_NOTE = ('MAGIC-UNet: run B (0.7 µm pixels)\nwith the data-consistency step.\n'
+              'Only MAGIC-UNet was adapted to 10 µm;\nCSC-LISTA kept its 3 µm settings.')
 plt.rcParams.update({
     'figure.facecolor': SURFACE, 'axes.facecolor': SURFACE, 'savefig.facecolor': SURFACE,
     'font.size': 10, 'axes.edgecolor': INK2, 'axes.labelcolor': INK, 'text.color': INK,
@@ -141,7 +143,7 @@ def per_layout(sim, fista_rows, extra, path):
     """One dot per layout at 10 um: MAGIC-UNet, FISTA and any further method in `extra` {label: (key, values)}."""
     fig, ax = plt.subplots(figsize=(7.6, 4.6), constrained_layout=True)
     magic = [100 * mean3(r, 'dc_est') for r in sim if r['run'] == 'run10b' and float(r['standoff']) == 10.0]
-    groups = [(f'MAGIC-UNet\n({len(magic)} layouts)', COLOR['magic'], magic),
+    groups = [(f'MAGIC-UNet, scale-adapted\n({len(magic)} layouts)', COLOR['magic'], magic),
               (f'FISTA\n(first {len(fista_rows)} layouts)', COLOR['fista'],
                [100 * np.mean([float(r[c]) for c in COMPONENTS]) for r in fista_rows])]
     groups += [(f'{label}\n(first {len(values)} layouts)', COLOR[key], [100 * v for v in values])
@@ -157,7 +159,8 @@ def per_layout(sim, fista_rows, extra, path):
     ax.set_xlim(-0.5, len(groups) - 0.2)
     ax.set_ylim(0, None)
     ax.set_ylabel('Relative L2 error per layout (%)')
-    ax.set_title('Simulation, 10 → 0.5 µm: one dot per layout', loc='left')
+    ax.set_title('Simulation, 10 → 0.5 µm: one dot per layout\nNot like-for-like: only MAGIC-UNet was adapted to the 10 µm scale',
+                 loc='left')
     ax.grid(axis='x', visible=False)
     fig.savefig(path, dpi=150)
     plt.close(fig)
@@ -213,7 +216,7 @@ def fista_curves(results, path):
 def comsol_bars(magic, fista, extra, path):
     """Per coil configuration: MAGIC-UNet, FISTA and any further method in `extra` {label: (key, {config: error})}."""
     configs = ['L1_C1', 'C1_C2', 'C1_C2_C3', 'C1_C2_C3_C4', 'IC_4um']
-    series = [('MAGIC-UNet', COLOR['magic'],
+    series = [('MAGIC-UNet (scale-adapted)', COLOR['magic'],
                [np.mean([float(r['raw']) for r in magic
                          if r['run'] == 'run10b' and r['variant'] == 'dc_est' and r['config'] == c])
                 for c in configs]),
@@ -232,10 +235,10 @@ def comsol_bars(magic, fista, extra, path):
     ax.set_xticks(np.arange(len(configs)))
     ax.set_xticklabels(configs)
     ax.set_ylabel('Relative L2 error (%), mean of Bx, By, Bz')
-    ax.set_ylim(0, 95)
+    ax.set_ylim(0, 112)
     ax.grid(axis='x', visible=False)
     ax.set_title('COMSOL, 10 → 0.5 µm, per coil configuration (secondary test: COMSOL differs from free-space\n'
-                 'physics at this height, so these scores partly measure that mismatch)', loc='left')
+                 'physics at this height). Not like-for-like: only MAGIC-UNet was adapted to the 10 µm scale', loc='left')
     ax.legend(fontsize=9, ncol=len(series), loc='upper center', bbox_to_anchor=(0.5, -0.1))
     fig.savefig(path, dpi=150)
     plt.close(fig)
@@ -329,6 +332,8 @@ def main():
     arr, meta = {}, {}
     parts = ['magic_part', 'fista_part'] + [f'{key}_part' for key, _ in EXTRA
                                               if (export / f'{key}_part.npz').exists()]
+    if (export / 'comsol3_part.npz').exists():          # 3 um comparison, from export_3um_figures.py
+        parts.append('comsol3_part')
     for part in parts:
         with np.load(export / f'{part}.npz') as z:
             arr.update({k: z[k] for k in z.files})
@@ -364,6 +369,19 @@ def main():
         ('sim_worst', f'Simulation, layout {meta["chosen"]["worst"]} (worst MAGIC-UNet error)', series('sim_worst')),
         ('comsol_L1_C1', 'COMSOL L1_C1', series('comsol_L1_C1')),
         ('comsol_IC_4um', 'COMSOL IC_4um', series('comsol_IC_4um'))], out / 'line_cuts.png')
+
+    if 'comsol3_L1_C1_target' in arr:                 # 3 -> 0.5 um, one colour scale per figure
+        three = out.parent / 'p7_m1_m2'
+        three.mkdir(parents=True, exist_ok=True)
+        cols3 = [('Target, 0.5 µm', 'target'), ('Input, 3 µm', 'input'), ('MAGIC-UNet', 'magic'),
+                 ('FISTA, 925 iterations', 'fista925'), ('FISTA-Net', 'fista_net'), ('CSC-LISTA', 'csc_lista')]
+        for config in ('L1_C1', 'IC_4um'):
+            maps(arr, meta, f'comsol3_{config}', cols3, f'COMSOL {config}, 3 → 0.5 µm, Bz',
+                 f'COMSOL {config}.\nMAGIC-UNet: run 2 with the\ndata-consistency step (ours),\nstandoff not given; the\n'
+                 f'others are told it.\nDashed line: row of the line cut.', three / f'comsol3_{config}_maps.png')
+        if booklet.is_dir() if (booklet := Path(a.booklet)) else False:
+            for f in three.glob('comsol3_*_maps.png'):
+                shutil.copyfile(f, booklet / f'p7_{f.name}')
 
     sim = rows(results / 'rescoring' / 'sim_scores.csv')
     standoff_curve(sim, fista['sim_full_mean_relative_l2'], out / 'error_vs_standoff.png')

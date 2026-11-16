@@ -4,6 +4,14 @@ In every comparison of this chapter, \textbf{MAGIC-UNet} means run B (0.7\um\ pi
 data-consistency step of Chapter~\ref{ch:consistency} at the height the network itself estimates. Run A appears only
 where the tile size is the subject.
 
+\begin{careful}[Read this before any table in this chapter: the comparison is not like-for-like]
+Only MAGIC-UNet was adapted to the 10\um\ scale: its pixels were enlarged so that its view covers 44.8\um, wider than the
+blur. CSC-LISTA and FISTA-Net ran with their 3\um\ settings and only the standoff changed. FISTA has no learned part,
+and everything about it was re-chosen at 10\um. So the CSC-LISTA and FISTA-Net rows say ``their 3\um\ configurations
+do not transfer'', not ``these architectures cannot work at 10\um''. Section~\ref{sec:fair} explains why, and gives the
+comparison that is like-for-like.
+\end{careful}
+
 \section{On simulation}
 
 \begin{center}
@@ -11,11 +19,11 @@ where the tile size is the subject.
 \toprule
 Simulation, 10\um\ to 0.5\um & Error & Layouts \\
 \midrule
-MAGIC-UNet & \textbf{15.8\%} & 50 \\
+MAGIC-UNet (scale-adapted) & \textbf{15.8\%} & 50 \\
 MAGIC-UNet, on the 20 layouts below & \textbf{14.7\%} & 20 \\
-FISTA, 3{,}000 iterations & 48.8\% & 20 \\
+FISTA, 3{,}000 iterations (re-tuned) & 48.8\% & 20 \\
 CSC-LISTA, with its 3\um\ settings & 91.8\% & 20 \\
-FISTA-Net & still training & \\
+FISTA-Net, with its 3\um\ settings & still training & \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -153,7 +161,7 @@ COMSOL, 10\um\ to 0.5\um & 15 pairs & C1 family & \code{IC_4um} \\
 FISTA, 3{,}000 iterations & \textbf{54.3\%} & \textbf{50.2\%} & 71.0\% \\
 MAGIC-UNet & 59.3\% & 59.6\% & \textbf{58.3\%} \\
 CSC-LISTA, with its 3\um\ settings & 98.1\% & 99.6\% & 92.4\% \\
-FISTA-Net & \multicolumn{3}{c}{still training} \\
+FISTA-Net, with its 3\um\ settings & \multicolumn{3}{c}{still training} \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -297,8 +305,74 @@ same dictionary needs about 3{,}000 here.
 \begin{careful}
 This is a statement about CSC-LISTA \emph{as configured for 3\um}, with only the standoff changed, as you asked. Wider
 filters or more layers were not tried, and the run already used 40 of the GPU's 49\,GB. FISTA-Net has only 7 layers; it
-is still training and may fail in the same way.
+is still training and may fail in the same way. Section~\ref{sec:fair} puts both in context.
 \end{careful}
+
+\section{Is this comparison fair? Not quite}\label{sec:fair}
+
+CSC-LISTA's failure is not a special case. It follows from three sizes that have to grow with the standoff, and only
+MAGIC-UNet's were grown. At 10\um\ a single wire's field is spread over roughly 15--20\um, and almost all of its fine
+detail is gone from the measurement.
+
+\begin{center}
+\small
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{3.1cm}>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}p{2.6cm}>{\raggedright\arraybackslash}p{2.6cm}}
+\toprule
+What must grow & Why & MAGIC-UNet run B & CSC-LISTA, FISTA-Net \\
+\midrule
+How far the learned part sees & To put a wire edge back, it must see the whole smeared shadow of the wire & 44.8\um\ view &
+15.5\um\ filters; a 2.1\um\ CNN \\
+How many steps & A frequency weakened by $H$ is corrected about $1/H^2$ times more slowly; FISTA needs 925 steps at 3\um,
+3{,}125 at 10\um & one forward pass, trained for this & 64 layers; 7 stages \\
+Penalty strength & FISTA's best $\lambda$ falls 100-fold from 3\um\ to 10\um & not used & CSC-LISTA starts 3{,}300 times above
+FISTA's 10\um\ value \\
+Training data & & 4{,}800 layouts & 200 layouts \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+Two of these deserve a sentence each. FISTA-Net's gradient step does act on the whole image, through the Fourier
+transform, but that step is fixed linear algebra. The part that has to \emph{invent} the missing edges is its learned
+CNN: ten $3\times3$ convolutions on 0.1\um\ pixels, so it sees about 2.1\um\ at a time, where the measurement is nearly
+featureless. And learned layers can beat plain iterations, which is the whole idea of LISTA (Chapter~\ref{ch:choice}),
+but not by the factors of 50 (CSC-LISTA) and 450 (FISTA-Net) that are missing here.
+
+\textbf{The comparison that is like-for-like.} Run A is MAGIC-UNet \emph{without} the scale change, so the methods can be
+compared with none of them adapted, on the same 20 layouts:
+
+\begin{center}
+\begin{tabular}{llc}
+\toprule
+Simulation, 10\um\ to 0.5\um, first 20 layouts & Adapted to 10\um? & Error \\
+\midrule
+FISTA, 3{,}000 iterations & re-tuned; no learned part & 48.8\% \\
+MAGIC-UNet run A, 12.8\um\ view & no & 52.7\% \\
+CSC-LISTA, 3\um\ settings & no & 91.8\% \\
+FISTA-Net, 3\um\ settings & no & still training \\
+\midrule
+\emph{MAGIC-UNet run B, 44.8\um\ view} & \emph{yes: pixel size} & \emph{14.7\%} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{keyidea}[What can and cannot be said]
+\begin{itemize}
+\item Without scale adaptation, no learned method beats FISTA at 10\um\ on average.
+\item With one adaptation, the pixel size, MAGIC-UNet beats it about three times over. Run A shows that the adaptation,
+not the architecture alone, did the work.
+\item The adaptation was not tried on CSC-LISTA or FISTA-Net, so we \textbf{cannot} say they would fail at 10\um. A
+scale-matched version would need 0.7\um\ pixels (CSC-LISTA's 155-pixel filters would then span 108\um, FISTA-Net's CNN
+about 15\um), a starting penalty from FISTA's 10\um\ choice, more layers, and several settings re-chosen at the new pixel
+size, such as a new dictionary. Each of those makes it more our variant and less the published method.
+\end{itemize}
+\end{keyidea}
+
+\begin{defend}[If your professor asks: why did only MAGIC-UNet get the pixel change?]
+Because the request was to run the published configurations with only the standoff changed, and MAGIC-UNet's tile size
+was the one question the protocol set out to answer. So the fair reading is the like-for-like table: with nothing
+adapted, nobody beats FISTA; the one adaptation we made, we tested with a control (run A). We do not claim that
+MAGIC-UNet's architecture beats CSC-LISTA's or FISTA-Net's at 10\um.
+\end{defend}
 
 \section{What can be claimed}
 
@@ -306,6 +380,7 @@ is still training and may fail in the same way.
 On free-space simulated data, MAGIC-UNet with a tile matched to the blur reconstructs the 0.5\um\ field from 10\um\ with
 15.8\% error, three times better than a converged FISTA, without being told the standoff, and one model covers
 6--14\um. On COMSOL at 10\um\ it does \textbf{not} beat FISTA. Part of that is COMSOL's own physics; the rest is open.
+The other learned methods were not adapted to the 10\um\ scale, so their 10\um\ results do not rank architectures.
 \end{keyidea}
 
 \begin{defend}[If your professor asks: 15\% at 10\um\ sounds too good. Is it real?]
