@@ -1,0 +1,173 @@
+\chapter{Rules first, and FISTA run properly}\label{ch:fista_depth}
+
+The review ended with a list of experiments. Before running any of them, one more thing was done first, and it is a
+habit worth keeping for the rest of your research.
+
+\section{Write the rules before you see the numbers}
+
+Suppose you run an experiment, look at the result, and then decide what counts as success. You will nearly always find
+a reading in which you succeeded. Nobody is being dishonest; with enough small choices left open, the data pick the
+choices for you. The cure is to close the choices in advance.
+
+So on 10 November a protocol was written (\code{M1_M2_PROTOCOL.md}) \emph{before} any new COMSOL score was read. It
+fixes:
+\begin{itemize}
+\item \textbf{which data} each number is computed on, and that nothing may be chosen on COMSOL;
+\item \textbf{every grid} that will be searched (heights, strengths, depths);
+\item \textbf{decision rules}: what result would confirm an idea, and what result would refute it;
+\item \textbf{a fingerprint}. The file's SHA-256 hash is stored with every output. If one character of the file changed
+later, the hash would no longer match.
+\end{itemize}
+When something really had to be added later, it went into a dated \emph{amendment} at the end, written before the number
+it affects. The same method was used for the 10\um\ work (Chapter~\ref{ch:ten}).
+
+\section{The reproduction gate}
+
+There is a second safeguard. Before any \emph{new} quantity is computed from an old model, the model must first
+reproduce its \emph{old} scores. If it cannot, something in the code or the data has drifted, and every new number would
+be built on sand.
+
+\begin{code*}{m1_rescore.py}
+    worst = max(abs(g['diff']) for g in gate)
+\end{code*}
+\begin{code*}{m1_rescore.py}
+    if worst > 1e-4:
+        raise SystemExit('reproduction gate failed; stopping (protocol)')
+\end{code*}
+
+\code{gate} holds, for every COMSOL pair and component, the saved score and the score from running the model again.
+The result: all eight unrolled networks reproduced their saved scores with a difference of exactly 0.0, and MAGIC-UNet
+to $1.5\times10^{-14}$.
+
+\begin{keyidea}
+This is why every script from here on runs from a frozen copy of the code in its own folder on the server
+(\code{experiments/...}). A result that cannot be reproduced exactly from frozen code is not a result yet.
+\end{keyidea}
+
+\section{FISTA again, in one loop}
+
+Chapter~\ref{ch:classics} built FISTA. As a reminder, it looks for sparse codes $x$ such that the dictionary, followed by
+the blur, explains the measurement $b$:
+\[
+\min_x\ \tfrac12\,\|\,\text{mask}\,(H D x - b)\,\|^2+\lambda\,\|x\|_1 .
+\]
+The whole solver is this loop:
+
+\begin{code*}{m2_fista_depth.py}
+        for s in range(1, (upto or snaps[-1]) + 1):
+            residual = mask * (physics.forward(y) - b)
+            update = csc.shrink(y - step * physics.adjoint(residual), lam * step)
+            t_next = (1 + (1 + 4 * t * t) ** .5) / 2
+            y = update + (t - 1) / t_next * (update - x)
+            t = t_next
+            x = update
+\end{code*}
+
+Line by line:
+\begin{itemize}
+\item \code{residual}: how far the current guess, blurred, is from the measurement. The mask hides the padding.
+\item \code{update}: one gradient step toward a better fit, then the shrink, which pushes small code values to zero.
+\item \code{t_next} and \code{y}: the momentum that makes it FISTA and not ISTA. The next step starts a little beyond
+the update, in the direction it was already moving.
+\end{itemize}
+
+\section{How many iterations?}
+
+Everything before 10 November used 300 iterations. The error had been falling from 32 to 64 to 300, and nobody had
+checked further. One observation makes the check cheap: the state of FISTA after $s$ iterations does not depend on how
+many more you plan to do. So one run to 3{,}000 gives the answer at every depth on the way. The code simply saves the
+field at chosen moments:
+
+\begin{code*}{m2_fista_depth.py}
+            elif s in snaps:
+                fields[s] = synth.forward(x)
+\end{code*}
+
+The strength $\lambda$ is chosen for each depth, on 16 simulated crops:
+
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+$\lambda$ (relative scale) & 300 iterations & 1{,}000 & 3{,}000 \\
+\midrule
+almost none ($2.3\times10^{-6}$) & 40.0\% & 82.3\% & 184.2\% \\
+0.001 & 36.1\% & 55.2\% & 75.5\% \\
+0.01 & 24.4\% & 25.1\% & 27.4\% \\
+\textbf{0.03} & \textbf{22.4\%} & \textbf{21.3\%} & \textbf{22.8\%} \\
+0.1 & 24.5\% & 23.5\% & 25.3\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Look at the top row. With almost no penalty, more iterations make things \emph{worse without limit}. The solver keeps
+improving its fit to the measurement, and the measurement contains noise. Fitting noise through an inverse blur
+amplifies it enormously.
+
+\begin{keyidea}[The iteration count is a second regulariser]
+Stopping early is itself a way of not fitting the noise. So FISTA has two knobs that do similar jobs: $\lambda$ and the
+number of iterations. ``FISTA-300'' was never ``the converged classical solution''. It was one tuned setting, and
+not the best one.
+\end{keyidea}
+
+With the best $\lambda$ at each depth, on all 64 validation crops and then on COMSOL:
+
+\begin{center}
+\begin{tabular}{lccccc}
+\toprule
+Iterations & Validation, 64 crops & COMSOL, 15 pairs & C1 family & \code{IC_4um} & Prior band \\
+\midrule
+300 & 35.5\% & 30.5\% & 31.2\% & 27.6\% & 23.8\% \\
+\textbf{1{,}000} & \textbf{34.0\%} & \textbf{26.7\%} & \textbf{26.6\%} & \textbf{27.2\%} & \textbf{19.3\%} \\
+3{,}000 & 36.3\% & 27.4\% & 27.0\% & 29.1\% & 20.2\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The depth was fixed by the validation column \emph{before} the COMSOL column was read (amendment A2). The last column is
+from Chapter~\ref{ch:limits}: the extra iterations gain in the prior band, the one that needs a prior. Up to 1{,}000 the
+dictionary keeps sharpening wire edges. Beyond that it starts fitting noise.
+
+\begin{careful}[What this did to every earlier comparison]
+FISTA at its best depth is 3.8 points better than FISTA-300. Every learned network in Chapters~\ref{ch:results}
+to~\ref{ch:magic_results} was compared with a baseline that was 3.8 points too weak. Against FISTA-1000:
+\begin{itemize}
+\item FISTA-Net (33.3\%) and CSC-LISTA (33.8\%) are not close. They are 7 points behind.
+\item MAGIC-UNet run 2 (27.0\%) does not win. It ties.
+\end{itemize}
+\end{careful}
+
+\section{Later: not three depths, but a curve}
+
+You then asked a fair question: why should the best depth be exactly 300, 1{,}000 or 3{,}000? It could be 1{,}259. So
+the script was extended to record the validation error every 25 iterations. It does not store the fields, only one
+number each time, so it costs about 1\% more:
+
+\begin{code*}{m2_fista_depth.py}
+            if score is not None:
+                if s % a.curve_every == 0:
+                    field = synth.forward(x)[..., a.pad:-a.pad, a.pad:-a.pad]
+                    fields[s] = float(relative_l2(field, score).sum())
+\end{code*}
+
+At 3\um\ the curve has its minimum at \textbf{925} iterations and is flat from 750 to 1{,}150
+(Figure~\ref{fig:hs_fista}). On COMSOL, FISTA-925 scores 26.9\% against 26.7\% for FISTA-1000. By the rule written
+before this check, \textbf{FISTA-925 is the 3\um\ baseline from now on}. It is 0.2 points weaker on COMSOL than FISTA-1000,
+which had been used for the seed verdict of Chapter~\ref{ch:consistency}; Chapter~\ref{ch:consistency} shows the verdict
+against both, and it is the same.
+
+\begin{careful}[Why not the single exact step]
+The curve is flat near its minimum, and the step is chosen on 64 simulated crops. Resolving it more finely than 25
+steps would fit those 64 crops, not the method. And it is never chosen on COMSOL.
+\end{careful}
+
+\begin{defend}[If your professor asks: is your classical baseline fair?]
+It uses the true standoff, a dictionary learned on the same simulator as the networks, and its penalty and its depth
+are both chosen on simulated data from a curve recorded every 25 iterations. At 3\um\ its best depth is 925 iterations
+and it scores 26.9\% on COMSOL. That is the number a learned method has to beat.
+\end{defend}
+
+\begin{defend}[If your professor asks: why did you report FISTA-300 for so long?]
+Because the error was still falling at 300 and nobody ran longer. That was a mistake, found by the review and
+corrected on 10 November. The early comparisons are kept in this booklet as they were, with a warning, so the
+correction can be seen.
+\end{defend}

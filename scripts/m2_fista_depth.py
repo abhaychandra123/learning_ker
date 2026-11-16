@@ -51,6 +51,15 @@ def main():
     p.add_argument('--sim-layouts-deep', type=int, default=0,
                    help='Number used instead when the reference depth is above 1,000 iterations')
     p.add_argument('--full-batch', type=int, default=1, help='Components per batch for full images')
+    p.add_argument('--curve-every', type=int, default=0,
+                   help='Record the validation error every N iterations and take the reference depth from\n'
+                        'that curve; --snapshots are then the depths always reported (multiples of N)')
+    p.add_argument('--sim-deep-above', type=int, default=1000,
+                   help='Use --sim-layouts-deep when the reference depth is above this')
+    p.add_argument('--curve-only', action='store_true',
+                   help='With --curve-every: stop after the validation curve (no COMSOL, no full images)')
+    p.add_argument('--keep-depths', type=int, nargs='+',
+                   help='Save COMSOL predictions only at these depths and the reference depth (default: all)')
     a = p.parse_args()
     out = Path(a.output)
     out.mkdir(parents=True, exist_ok=False)
@@ -66,8 +75,12 @@ def main():
     device = torch.device(a.device)
     snaps = [a.pad_test_depth] if a.pad_test else sorted(a.snapshots)
 
-    def fista_snapshots(b, g, lam, upto=None):
-        """conv_lista.code_ista (fast=True) with the field saved at every snapshot depth up to `upto`."""
+    def fista_snapshots(b, g, lam, upto=None, score=None):
+        """conv_lista.code_ista (fast=True) with the field saved at every snapshot depth up to `upto`.
+
+        With `score` (the cropped targets) nothing is kept except the summed relative L2 of the batch at every
+        --curve-every-th iteration: {depth: sum over the batch}.
+        """
         h = csc.transfer(b.shape[-1], 0.1, a.z_delta, b.dtype, b.device)
         physics, synth = csc.Operator(g, h, a.chunk), csc.Operator(g, chunk=a.chunk)
         n = b.shape[-1]
@@ -82,7 +95,11 @@ def main():
             y = update + (t - 1) / t_next * (update - x)
             t = t_next
             x = update
-            if s in snaps:
+            if score is not None:
+                if s % a.curve_every == 0:
+                    field = synth.forward(x)[..., a.pad:-a.pad, a.pad:-a.pad]
+                    fields[s] = float(relative_l2(field, score).sum())
+            elif s in snaps:
                 fields[s] = synth.forward(x)
         return fields
 
@@ -142,17 +159,21 @@ def main():
         log('best per pad', best, '-> chosen', chosen)
         return
 
-    trials = {}                               # scale -> {depth: score on 16 crops}
+    floor = min(a.scales)                     # 2.29e-6: effectively no penalty, not a grid end to extend from
 
-    def trial(scale):
-        pred = predict(val[1][:16], g, lam0 * scale, 4)
-        trials[scale] = {s: float(relative_l2(pred[s], val[0][:16]).mean()) for s in snaps}
-        log(f'scale {scale:g} (lambda {lam0 * scale:g}):', trials[scale])
+    def extension(best, tried):
+        """Next scale to try when `best` sits at an end of the tried grid, else None (--ladder)."""
+        inner = sorted(k for k in tried if k != floor)
+        if best == inner[-1]:
+            return next((x for x in (0.3, 1.0, 3.0) if x > inner[-1]), None)
+        if best == inner[0] or best == floor:
+            return next((x for x in (0.0003, 0.0001, 0.00003, 0.00001) if x < inner[0]), None)
+        return None
 
-    for scale in a.scales:
-        trial(scale)
-    if not a.skip_gate:
-        # gate: step-300 snapshot against the stored fista300 trials
+    def run_gate(trials):
+        """Step-300 errors on the 16 crops against the stored fista300 trials (3 -> 0.5 um only)."""
+        if a.skip_gate:
+            return
         ref = {round(lam, 12): score for score, lam in
                json.loads(Path(a.reference).read_text())['choices']['fista300']['trials']}
         gate = [dict(scale=s, lam=lam0 * s, stored=ref[round(lam0 * s, 12)], rerun=trials[s][300])
@@ -164,50 +185,127 @@ def main():
         if worst > 1e-4:
             raise SystemExit('gate failed')
 
-    floor = min(a.scales)                     # 2.29e-6: effectively no penalty, not a grid end to extend from
+    notes = {}
+    if a.curve_every:
+        # Validation error recorded every --curve-every iterations. Lambda is chosen per depth on the first 16
+        # crops; the reference depth is the minimum of the 64-crop curve. COMSOL is scored only after that.
+        if any(s % a.curve_every for s in a.snapshots):
+            raise SystemExit('--snapshots must be multiples of --curve-every')
+        report = sorted(a.snapshots)
+        grid = list(range(report[0], report[-1] + 1, a.curve_every))
 
-    def extension(best):
-        """Next scale to try when `best` sits at an end of the tried grid, else None (--ladder)."""
-        inner = sorted(k for k in trials if k != floor)
-        if best == inner[-1]:
-            return next((x for x in (0.3, 1.0, 3.0) if x > inner[-1]), None)
-        if best == inner[0] or best == floor:
-            return next((x for x in (0.0003, 0.0001, 0.00003, 0.00001) if x < inner[0]), None)
-        return None
+        @torch.no_grad()
+        def curve(inputs, targets, lam):
+            total = {}
+            for part, truth in zip(inputs.split(4), targets.split(4)):
+                errors = fista_snapshots(padded(part.to(device), a.pad), g, lam, score=truth.to(device))
+                for s, e in errors.items():
+                    total[s] = total.get(s, 0.0) + e
+            return {s: total[s] / len(inputs) for s in grid}
 
-    # choice per depth: the protocol's single extension at a grid edge, or the ladder
-    choice = {}
-    for s in snaps:
-        best = min(trials, key=lambda sc: trials[sc][s])
-        if a.ladder:
-            while (extra := extension(best)) is not None:
-                trial(extra)
+        trials = {}                           # scale -> {depth: error on 16 crops}
+
+        def trial(scale):
+            trials[scale] = curve(val[1][:16], val[0][:16], lam0 * scale)
+            best = min(grid, key=trials[scale].get)
+            log(f'scale {scale:g} (lambda {lam0 * scale:g}): best {trials[scale][best]:.4f} at {best};',
+                {s: round(trials[scale][s], 4) for s in report})
+
+        for scale in a.scales:
+            trial(scale)
+        run_gate(trials)
+        grew = True
+        while grew:                           # extend lambda until no depth has its best at a grid end
+            grew = False
+            for s in grid:
                 best = min(trials, key=lambda sc: trials[sc][s])
-        else:
-            extra = {0.1: 0.3, 0.001: 0.0003}.get(best)
-            if extra is not None and extra not in trials:
-                trial(extra)
-                best = min(trials, key=lambda sc: trials[sc][s])
-        choice[s] = best
-    log('chosen scales per depth', choice)
+                more = extension(best, trials) if a.ladder else {0.1: 0.3, 0.001: 0.0003}.get(best)
+                if more is not None and more not in trials:
+                    trial(more)
+                    grew = True
+                    break
+        choice = {s: min(trials, key=lambda sc: trials[sc][s]) for s in grid}
+        curves = {}
+        for scale in sorted(set(choice.values())):
+            curves[scale] = curve(val[1], val[0], lam0 * scale)
+            log(f'64-crop curve for scale {scale:g} done')
+        validation = {s: curves[choice[s]][s] for s in grid}
+        reference = min(grid, key=validation.get)
+        near = [s for s in grid if validation[s] <= validation[reference] + 0.001]
+        notes = dict(curve_every=a.curve_every, reference_scale=choice[reference],
+                     reference_validation=validation[reference],
+                     within_0p1_point=[near[0], near[-1]],
+                     validation_at_report={str(s): validation[s] for s in report})
+        log(f'reference depth {reference} (scale {choice[reference]:g}), validation {validation[reference]:.4f};',
+            f'within 0.1 point from {near[0]} to {near[-1]};', notes['validation_at_report'])
+        if a.curve_only:
+            (out / 'results.json').write_text(json.dumps(dict(
+                trials={str(k): {str(d): e for d, e in v.items()} for k, v in trials.items()},
+                choice={str(k): v for k, v in choice.items()},
+                curves={str(k): {str(d): e for d, e in v.items()} for k, v in curves.items()},
+                validation={f'fista{k}': v for k, v in validation.items()}, reference_depth=reference,
+                reference_at_last_snapshot=bool(reference == report[-1]), z_input=a.z_input,
+                z_delta=a.z_delta, pad=a.pad, **notes), indent=2))
+            return
+        snaps[:] = sorted(set(report) | {reference})
+        comsol, preds = [], {}
+        for scale in sorted({choice[s] for s in snaps}):
+            depths = [s for s in snaps if choice[s] == scale]
+            for config, sharp, blurred in comsol_inputs():
+                target = torch.tensor(sharp / dataset.scale, dtype=torch.float32)
+                y = predict(torch.tensor(blurred / dataset.scale, dtype=torch.float32), g, lam0 * scale,
+                            a.full_batch, upto=depths[-1])
+                for s in depths:
+                    e = relative_l2(y[s], target)
+                    preds[f'fista{s}_{config}'] = (y[s].numpy() * dataset.scale).astype(np.float32)
+                    for c, comp in enumerate(('Bx', 'By', 'Bz')):
+                        comsol.append(dict(method=f'fista{s}', lam=lam0 * scale, config=config, component=comp,
+                                           relative_l2=float(e[c])))
+                log(f'scale {scale:g} {config} done')
+    else:
+        trials = {}                               # scale -> {depth: score on 16 crops}
 
-    rows, validation, comsol = [], {}, []
-    preds = {}
-    for scale in sorted(set(choice.values())):
-        depths = [s for s in snaps if choice[s] == scale]
-        pv = predict(val[1], g, lam0 * scale, 4)
-        for s in depths:
-            validation[s] = float(relative_l2(pv[s], val[0]).mean())
-        for config, sharp, blurred in comsol_inputs():
-            target = torch.tensor(sharp / dataset.scale, dtype=torch.float32)
-            y = predict(torch.tensor(blurred / dataset.scale, dtype=torch.float32), g, lam0 * scale, 1)
+        def trial(scale):
+            pred = predict(val[1][:16], g, lam0 * scale, 4)
+            trials[scale] = {s: float(relative_l2(pred[s], val[0][:16]).mean()) for s in snaps}
+            log(f'scale {scale:g} (lambda {lam0 * scale:g}):', trials[scale])
+
+        for scale in a.scales:
+            trial(scale)
+        run_gate(trials)
+        # choice per depth: the protocol's single extension at a grid edge, or the ladder
+        choice = {}
+        for s in snaps:
+            best = min(trials, key=lambda sc: trials[sc][s])
+            if a.ladder:
+                while (extra := extension(best, trials)) is not None:
+                    trial(extra)
+                    best = min(trials, key=lambda sc: trials[sc][s])
+            else:
+                extra = {0.1: 0.3, 0.001: 0.0003}.get(best)
+                if extra is not None and extra not in trials:
+                    trial(extra)
+                    best = min(trials, key=lambda sc: trials[sc][s])
+            choice[s] = best
+        log('chosen scales per depth', choice)
+
+        rows, validation, comsol = [], {}, []
+        preds = {}
+        for scale in sorted(set(choice.values())):
+            depths = [s for s in snaps if choice[s] == scale]
+            pv = predict(val[1], g, lam0 * scale, 4)
             for s in depths:
-                e = relative_l2(y[s], target)
-                preds[f'fista{s}_{config}'] = (y[s].numpy() * dataset.scale).astype(np.float32)
-                for c, comp in enumerate(('Bx', 'By', 'Bz')):
-                    comsol.append(dict(method=f'fista{s}', lam=lam0 * scale, config=config, component=comp,
-                                       relative_l2=float(e[c])))
-            log(f'scale {scale:g} {config} done')
+                validation[s] = float(relative_l2(pv[s], val[0]).mean())
+            for config, sharp, blurred in comsol_inputs():
+                target = torch.tensor(sharp / dataset.scale, dtype=torch.float32)
+                y = predict(torch.tensor(blurred / dataset.scale, dtype=torch.float32), g, lam0 * scale, 1)
+                for s in depths:
+                    e = relative_l2(y[s], target)
+                    preds[f'fista{s}_{config}'] = (y[s].numpy() * dataset.scale).astype(np.float32)
+                    for c, comp in enumerate(('Bx', 'By', 'Bz')):
+                        comsol.append(dict(method=f'fista{s}', lam=lam0 * scale, config=config, component=comp,
+                                           relative_l2=float(e[c])))
+                log(f'scale {scale:g} {config} done')
     with open(out / 'comsol.csv', 'w', newline='') as stream:
         w = csv.DictWriter(stream, fieldnames=list(comsol[0]))
         w.writeheader()
@@ -218,13 +316,18 @@ def main():
         trials={str(k): v for k, v in trials.items()}, choice={str(k): v for k, v in choice.items()},
         validation={f'fista{k}': v for k, v in validation.items()}, comsol_mean_relative_l2=summary,
         z_input=a.z_input, z_delta=a.z_delta, pad=a.pad)
-    (out / 'results.json').write_text(json.dumps(results, indent=2))
-    np.savez_compressed(out / 'predictions.npz', **preds)
-    log('COMSOL means', summary)
-
-    # full simulated images at the reference depth (lowest 64-crop validation error), chosen without COMSOL
+    results.update(notes)
+    # reference depth: lowest 64-crop validation error among the sampled depths, chosen without COMSOL
     reference = min(validation, key=validation.get)
-    count = a.sim_layouts if reference <= 1000 else (a.sim_layouts_deep or a.sim_layouts)
+    results.update(reference_depth=reference, reference_at_last_snapshot=bool(reference == snaps[-1]))
+    (out / 'results.json').write_text(json.dumps(results, indent=2))
+    keep = set(a.keep_depths or snaps) | {reference}
+    np.savez_compressed(out / 'predictions.npz',
+                        **{k: v for k, v in preds.items() if int(k.split('_')[0][len('fista'):]) in keep})
+    log('COMSOL means', summary, 'reference depth', reference)
+
+    # full simulated images at the reference depth
+    count = a.sim_layouts if reference <= a.sim_deep_above else (a.sim_layouts_deep or a.sim_layouts)
     if count:
         recipes = dataset.recipes('validation')[:count]
         rows = []
@@ -240,7 +343,7 @@ def main():
             w = csv.DictWriter(stream, fieldnames=list(rows[0]))
             w.writeheader()
             w.writerows(rows)
-        results.update(reference_depth=reference, sim_full_layouts=len(rows),
+        results.update(sim_full_layouts=len(rows),
                        sim_full_mean_relative_l2=float(np.mean([[r[c] for c in ('Bx', 'By', 'Bz')] for r in rows])))
         (out / 'results.json').write_text(json.dumps(results, indent=2))
         log('simulated full images', results['sim_full_mean_relative_l2'], 'at depth', reference)

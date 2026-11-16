@@ -6,36 +6,54 @@ Term & Meaning \\
 \midrule
 \endhead
 Adjoint & The transpose of an operator. For a convolution it is the 180-degree rotated filter \\
+Amendment & A dated addition to a protocol, written before the number it affects is read (Chapter~\ref{ch:fista_depth}) \\
+Amplitude (of an output) & $\langle y,t\rangle/\langle t,t\rangle$: how strong the output is along the target; 1 is right (Chapter~\ref{ch:ten_results}) \\
 Atom & One small image in a dictionary, $g_m$ \\
 BatchNorm & A layer that normalises each channel. It uses batch statistics in training and stored running statistics at test time \\
+Binning & Averaging $f\times f$ pixels into one. Run 2 and run A use $f=2$ (0.2\um), run B uses $f=7$ (0.7\um) \\
 Checkpoint & A saved copy of a model. Also a separate memory trick in \code{torch.utils.checkpoint} \\
 Code & A map $x_m$ saying where and how strongly to stamp atom $m$ \\
 COMSOL & The finite-element simulation we use as test data \\
+Cosine similarity & $\langle y,t\rangle/(\lVert y\rVert\,\lVert t\rVert)$: how alike two patterns are, whatever their strength \\
+Data-consistency step & One Tikhonov correction $X+\frac{H}{H^2+\mu}(B-HX)$ that makes the output agree with the measurement in the measured band. Our addition (Chapter~\ref{ch:consistency}) \\
 Density & Fraction of code values that are not exactly zero \\
 Dictionary & The set of atoms \\
+Effective standoff & The height a source appears to be at. It includes conductor thickness, NV-layer thickness and optical blur \\
 Epoch & One pass over the training data. Here, 600 crops; for MAGIC-UNet, 153,600 crops \\
 Equivalent sheet current & $J_\text{eff}=J\,e^{-kd}$: the current at the reference plane that gives the same field as the true current a depth $d$ below it \\
 FISTA & ISTA plus momentum \\
+Height read-out, $h^\ast$ & The height at which the network's own current best explains the measured field (Chapter~\ref{ch:height}) \\
 Ill-posed & A problem where the data alone does not fix the answer \\
 ISTA & Gradient step plus shrink, repeated \\
+$k_0$ & The extra decay constant in COMSOL's field, about 0.10\,rad/\um. A numerical property of the solve, not physics (Chapter~\ref{ch:comsol}) \\
+$k_c$ & The frequency where the blurred signal sinks below the noise; the top of the measured band \\
+$k_n$ & The frequency above which the COMSOL target is mostly noise: 2.9\,rad/\um \\
 Lasso & Least squares plus an $\ell_1$ penalty \\
+LISTA & ISTA unrolled into layers with learned weights \\
 Lost-band floor & The error left if every frequency above the signal-to-noise crossing is lost and nothing is invented \\
 MAGIC-UNet & The U-Net of Reed et al.\ 2024, from vector field to current \\
-LISTA & ISTA unrolled into layers with learned weights \\
 Mask & An array of 0s and 1s that hides the padding \\
+Measured band & Frequencies below $k_c$, where the measurement still carries the signal (Chapter~\ref{ch:limits}) \\
+Noise band & Frequencies above $k_n$, where the COMSOL target itself is mesh noise \\
 NRMSE & Root mean square error divided by the target's range \\
 Oracle & A score from a method fitted on its own test data: a ceiling, not a usable method \\
 Pipeline floor & MAGIC-UNet's error with a perfect current, from cutting the image into tiles: 2.9\% \\
 Plain & Eq.~20 with no threshold floor \\
+Prior band & Frequencies from $k_c$ to $k_n$: real field the measurement has lost, which only a prior can fill in \\
+Protocol & A file that fixes data, grids and decision rules before any score is read, with its hash recorded \\
 Relative $L_2$ & $\lVert y-t\rVert_2/\lVert t\rVert_2$, our main score \\
+Reproduction gate & A check that an old model still reproduces its old scores before anything new is computed with it \\
 Residual & The mismatch between predicted and measured data \\
+Run A, run B & The two 10\um\ MAGIC-UNet runs: 0.2\um\ pixels (12.8\um\ tile) and 0.7\um\ pixels (44.8\um\ tile) \\
+Seed & The number that fixes a training run's random choices: starting weights, batch order, noise \\
 Shrink, soft threshold & Move a value toward zero by $\theta$, stopping at zero \\
 Sparse (run) & Eq.~20 with a floor on the thresholds, our addition \\
 Speckle & Fine mesh noise in COMSOL fields \\
 Standoff & Distance between source and sensor \\
 Standoff ambiguity & A source at depth $h$ and a sharper one at $h+\delta$ give the same field \\
-Strict & Plain Eq.~20 with MSE, at 32 and 64 layers \\
 Stream & Training on a newly simulated layout for every crop \\
+Strict & Plain Eq.~20 with MSE, at 32 and 64 layers \\
+Stride & The step between neighbouring tiles; smaller than the tile, so tiles overlap \\
 Tile & A $64\times64$ piece of the image that MAGIC-UNet processes at a time \\
 U-Net & A network that shrinks the image in an encoder and grows it back in a decoder, with skip connections between them \\
 Unrolling & Turning iterations into network layers \\
@@ -48,11 +66,11 @@ Wiener & $h/(h^2+\mu)$, a one-parameter deblurring filter \\
 
 \section*{Code}
 
-\begin{center}
-\begin{tabularx}{\textwidth}{lX}
+\begin{longtable}{>{\raggedright\arraybackslash}p{6.6cm}>{\raggedright\arraybackslash}p{8.4cm}}
 \toprule
 File & Contents \\
 \midrule
+\endhead
 \code{scripts/simulate_fields.py} & Data generator \\
 \code{scripts/plot_simulated.py} & Realism report \\
 \code{scripts/csc_lista.py} & Operator, ISTA, FISTA, dictionary learning, CSC-LISTA, Wiener \\
@@ -60,27 +78,38 @@ File & Contents \\
 \code{scripts/fista_net.py} & FISTA-Net \\
 \code{scripts/train_fista_net.py} & FISTA-Net training \\
 \code{scripts/score_fista_depths.py} & FISTA at chosen depths, with a $\lambda$ search \\
-\code{tests/test_*.py} & 15 simulation, 15 CSC-LISTA and 8 FISTA-Net tests; 14 MAGIC-UNet tests \\
+\code{tests/test_*.py} & 15 simulation, 15 CSC-LISTA and 8 FISTA-Net tests; 17 MAGIC-UNet tests; 10 for the height read-out and data-consistency step \\
 \code{scripts/wiener_oracle.py} & Wiener filters fitted on COMSOL (Chapter~\ref{ch:floor}) \\
 \code{scripts/information_budget.py} & Lost-band floor per pair \\
 \code{scripts/magic_unet.py} & MAGIC-UNet, Keras initialisation, tiling, Biot--Savart, metrics \\
 \code{scripts/magic_data.py} & MAGIC-UNet training crops, noise per crop, \code{--resigma}, \code{--z-uniform} \\
 \code{scripts/train_magic_unet.py} & MAGIC-UNet training and scoring \\
 \code{hpc/run_magic_unet.sh} & Server run: data, then training; re-run to resume \\
+\code{scripts/m12_common.py}, \code{m1_rescore.py} & Height read-out and data-consistency step (Chapter~\ref{ch:review}) \\
+\code{scripts/m2_fista_depth.py} & FISTA: penalty, padding and depth chosen on simulation, 25-step curve \\
+\code{hpc/run_high_standoff_scoring.sh} & Scoring queue for the 10\um\ runs \\
+\code{hpc/run_high_standoff_methods.sh} & CSC-LISTA, FISTA curve and FISTA-Net at 10\um \\
+\code{scripts/k0_check.py} & Simulated test set with COMSOL-like extra decay \\
+\code{scripts/tile_context_check.py} & Share of a tile's field from currents outside it (Chapter~\ref{ch:ten}) \\
+\code{scripts/comsol_check/} & Every COMSOL check of Chapter~\ref{ch:comsol} \\
+\code{scripts/export_high_standoff.py}, \code{plot_high_standoff.py} & Figures of Chapter~\ref{ch:ten}, also copied into this booklet \\
 \code{README_MAGIC_UNET.md}, \code{RESEARCH_BEYOND_ISTA.md} & Notes for Chapters~\ref{ch:question} to~\ref{ch:magic_results} \\
+\code{M1_M2_PROTOCOL.md}, \code{M1_M2_RESULTS.md} & Rules and results of Chapter~\ref{ch:review} \\
+\code{README_COMSOL_MODEL.md} & Chapter~\ref{ch:comsol} \\
+\code{HIGH_STANDOFF_PROTOCOL.md} & Rules of Chapter~\ref{ch:ten}, with six amendments \\
+\code{final_evaluation/} & Everything for the report: journey, scoreboard, figures, result tables \\
 \bottomrule
-\end{tabularx}
-\end{center}
+\end{longtable}
 
 \section*{Results on the server}
 
 Host \code{abhaychandra@10.129.6.189}, folder \code{~/learning_ker}.
 
-\begin{center}
-\begin{tabularx}{\textwidth}{lX}
+\begin{longtable}{>{\raggedright\arraybackslash}p{6.6cm}>{\raggedright\arraybackslash}p{8.4cm}}
 \toprule
 Folder & Contents \\
 \midrule
+\endhead
 \code{runs/simulated_3_to_05_v3} & Dataset \\
 \code{runs/csc_lista_v2/dictionary_strong} & Three dictionaries; $\lambda=0.3$ is used \\
 \code{runs/csc_lista_v2/full_plain} & Plain, 16 layers, with ISTA and FISTA baselines \\
@@ -99,17 +128,23 @@ Folder & Contents \\
 \code{runs/csc_lista_relative} & Strict 64 with relative loss, stored and streamed \\
 \code{runs/magic_unet/run} & MAGIC-UNet run 1 (invalid, BatchNorm) \\
 \code{runs/magic_unet/run2} & MAGIC-UNet run 2 \\
-\code{runs/magic_unet/run3} & MAGIC-UNet run 3, standoff 1--10\um\ (running) \\
+\code{runs/magic_unet/run3} & MAGIC-UNet run 3, standoff 1--10\um \\
+\code{runs/m1_m2} & Chapter~\ref{ch:review}: read-out, data consistency, FISTA depths, seeds \\
+\code{runs/magic_unet/run10a}, \code{run10b} & The two 10\um\ runs (12.8 and 44.8\um\ tiles) \\
+\code{runs/high_standoff} & Scoring at 10\um: FISTA, read-out, extra-decay check, CSC-LISTA, FISTA-Net \\
 \code{runs/magic_unet/data}, \code{data_any} & Training crops for runs 1--2 and run 3 \\
 \bottomrule
-\end{tabularx}
-\end{center}
+\end{longtable}
 
 \section*{This booklet}
 
 \begin{itemize}
 \item \code{booklet/main.tex} is the main file, with one file per chapter in \code{booklet/chapters}.
 \item \code{booklet/make_figures.py} redraws the figures. \code{booklet/export_magic.py} exports the MAGIC-UNet data it needs from the server.
+\item \code{scripts/plot_high_standoff.py} redraws the figures of Chapter~\ref{ch:ten} and copies them to
+\code{booklet/figures} with the prefix \code{hs_}.
+\item \code{booklet/make_figures_late.py} draws the teaching figures of Chapters~\ref{ch:limits}
+to~\ref{ch:ten} (prefix \code{late_}).
 \item \code{booklet/check_snippets.py} confirms that every code block still matches the repository.
 \end{itemize}
 

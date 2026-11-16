@@ -225,7 +225,11 @@ server; it was started locally by mistake and stopped.
 ## High-standoff runs at 10 → 0.5 µm (launched 14 November 2026, 07:04 server time)
 
 Rules fixed before launch: [HIGH_STANDOFF_PROTOCOL.md](HIGH_STANDOFF_PROTOCOL.md) (hash in
-`runs/magic_unet/protocol_10um_sha256.txt` on the server). No results yet.
+`runs/magic_unet/protocol_10um_sha256.txt` on the server). Results, figures and the full account (16 November):
+[final_evaluation/02_source_docs/p9_high_standoff/README_HIGH_STANDOFF.md](final_evaluation/02_source_docs/p9_high_standoff/README_HIGH_STANDOFF.md).
+In short, at 10 → 0.5 µm: on simulation MAGIC-UNet (run B, 44.8 µm tile, with the data-consistency step) 15.8%,
+FISTA 48.8%, CSC-LISTA with its 3 µm settings 91.8%, and run A (12.8 µm tile) 58.2%; on COMSOL FISTA 54.3%,
+MAGIC-UNet 59.3%, CSC-LISTA 98.1%. FISTA-Net at 10 µm was still training on 16 November.
 
 | | Run A, `run10a` (control) | Run B, `run10b` |
 |---|---|---|
@@ -252,5 +256,15 @@ another run (`QDM_WAIT_FOR`). Launch variables:
 QDM_TRAIN_ARGS="--z-mean 10 --z-std 2 --sim-z-input 10 --data3-heights 3 10 --save-z-input 10"`; run B uses
 `--bin 7`, `data10b`, `run10b` and `QDM_WAIT_FOR=$HOME/learning_ker/runs/magic_unet/run10a.done`.
 
-Still to do before scoring the full comparison: extend `m1_rescore.py` (height grid to 20 µm, simulated standoffs
-6–14 µm, data3 at 10 µm) and `m2_fista_depth.py` (operator 9.5 µm, simulated crops at 10 µm) as the protocol says.
+Scoring scripts for 10 µm (prepared 14 November; rules in amendment A1 of the protocol):
+
+- `scripts/m1_rescore.py`: `--height-max 20` (read-out grid), `--data3-heights 10`, `--comsol-z-inputs 10`,
+  `--save-z-input 10`; defaults reproduce M1.
+- `scripts/m2_fista_depth.py`: `--z-input 10 --z-delta 9.5`, `--skip-gate`, `--ladder` (λ extension), `--pad-test`
+  (padding chosen on simulation), `--curve-every 25` (validation error every 25 iterations; the reference depth is
+  the minimum of that curve, not one of three fixed depths), `--sim-layouts` (full simulated images at the reference
+  depth); defaults reproduce M2d.
+- `QDM_RECHECK_3UM=1` adds the 3 → 0.5 µm FISTA again with the same 25-step curve, to check that 1,000 iterations
+  was the right baseline depth there (amendment A3).
+- `hpc/run_high_standoff_scoring.sh` queues them: padding test, wait for both runs, rescoring, FISTA. Outputs go to
+  `runs/high_standoff/{fista_pad_test,m1,fista}`.

@@ -1,0 +1,93 @@
+\chapter{Run 3: one network for every standoff}\label{ch:run3}
+
+Chapters~\ref{ch:floor} to~\ref{ch:magic_results} end on 8 November, with run 3 still training. This chapter and the
+eight after it cover 8 to 16 November. They are written the same way as the rest: every idea is rebuilt from the
+start, and every grey block is copied from the repository.
+
+\section{What run 3 changes}
+
+Run 2 was trained on standoffs of $3\pm0.6$\um. You asked whether one network could cover \emph{any} standoff. The
+network never sees the height, so the architecture needs no change. Only one line of the data generator differs: how
+the standoff of each training crop is drawn.
+
+\begin{code*}{magic_data.py}
+        if cfg.get('z_uniform'):                  # run 3: any standoff in [lo, hi]
+            zs.append(float(rng.uniform(*cfg['z_uniform'])))
+            continue
+        z = rng.normal(cfg['z_mean'], cfg['z_std'])
+        if abs(z - cfg['z_mean']) <= cfg['z_trunc'] * cfg['z_std']:
+            zs.append(float(z))
+\end{code*}
+
+Run 2 takes the bottom three lines: a normal distribution around 3\um, cut at three standard deviations. Run 3 takes the
+top branch with \code{--z-uniform 1 10}: every height from 1 to 10\um\ is equally likely. Everything else is identical.
+
+\section{The result}
+
+On the simulated validation layouts, with the target always at 0.5\um:
+
+\begin{center}
+\small
+\begin{tabular}{lcccccccccc}
+\toprule
+Input standoff (\textmu m) & 1 & 2 & 3 & 4 & 5 & 6 & 7 & 8 & 10 \\
+\midrule
+Run 2 ($3\pm0.6$\um) & 22.8\% & 14.2\% & 15.1\% & 15.4\% & 25.4\% & 48.1\% & 67.9\% & 80.5\% & 92.0\% \\
+Run 3 (1--10\um) & 35.3\% & 26.1\% & 22.7\% & 22.1\% & 26.1\% & 31.2\% & 33.7\% & 36.1\% & 56.8\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+And on COMSOL at 3\um\ to 0.5\um:
+
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+ & 15 pairs & C1-family coils & \code{IC_4um} \\
+\midrule
+Run 2 & 27.0\% & 26.3\% & 29.6\% \\
+Run 3 & 34.8\% & 30.4\% & 52.0\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{keyidea}[What run 3 shows]
+\begin{itemize}
+\item \textbf{A wide range has a price.} Inside run 2's range (2--4\um) run 3 is 7 to 12 points worse. A network that must
+be ready for any blur is less sure about each one.
+\item \textbf{It buys reach.} From 5 to 8\um\ run 3 holds at 26--36\% where run 2 collapses.
+\item \textbf{It breaks at the edge of its own range.} At 10\um\ it jumps to 56.8\%. Remember this number: it is the reason
+the 10\um\ runs of Chapter~\ref{ch:ten} are trained with 10\um\ in the \emph{middle} of their range.
+\end{itemize}
+\end{keyidea}
+
+\section{Why the IC coil fails}
+
+On \code{IC_4um} run 3 scores 52\%, and by component it is 31 / 69 / 56\% for $B_x$ / $B_y$ / $B_z$. That is not noise. It has
+a cause, and the cause is the ambiguity of Chapter~\ref{ch:question}.
+
+The IC coil has pairs of wires close together that carry current in \emph{opposite} directions. Far above such a pair
+the two fields nearly cancel. What survives is weak and smooth. But ``weak and smooth'' is also exactly what a single
+wire looks like from far away. So a tile that sees such a pair has two explanations:
+\begin{itemize}
+\item two opposite wires, close to the sensor; or
+\item one source, far from the sensor, which must then be made much stronger and sharper to explain the same field.
+\end{itemize}
+Run 2 only knows heights near 3\um, so it has no choice but the first. Run 3 was told that anything from 1 to 10\um\ is
+possible, and on these tiles it picks ``far''. It then over-amplifies, and the 0.5\um\ field comes out wrong.
+
+There is a second ingredient. MAGIC-UNet works tile by tile, and each $12.8$\um\ tile makes this decision \emph{alone}.
+Nothing tells neighbouring tiles that the whole image was measured at one height.
+
+\begin{careful}[What is established and what is not]
+The pattern (the failure sits on the closely spaced opposite wires, and different tiles imply different heights) was
+measured on the server. The explanation is the best one we have, and Chapter~\ref{ch:height} tests one consequence of
+it: if the only problem were the per-tile height, then forcing \emph{one} height on the whole image should rescue run 3.
+It does not.
+\end{careful}
+
+\begin{defend}[If your professor asks: so can one network handle an unknown standoff?]
+Inside a narrow band, yes: run 2 works from 2 to 4\um\ without being told the height. Across a wide band it works on
+simple wires and fails where the wires are ambiguous, because the field alone cannot separate ``close and weak'' from
+``far and strong''. That is the height ambiguity showing up inside a trained network.
+\end{defend}

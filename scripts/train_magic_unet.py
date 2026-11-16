@@ -102,7 +102,7 @@ def train(args, data, output, device):
         state = torch.load(latest, map_location=device, weights_only=False)
         model.load_state_dict(state['model'])
         optimizer.load_state_dict(state['optimizer'])
-        torch.set_rng_state(state['torch_rng'])
+        torch.set_rng_state(state['torch_rng'].cpu())      # map_location moved it to the GPU
         start, history = state['epoch'], state['history']
         print('resumed after epoch', start, flush=True)
     noise = torch.Generator().manual_seed(args.seed * 1000 + start)

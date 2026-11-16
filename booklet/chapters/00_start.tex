@@ -59,13 +59,37 @@ so far. Chapters~\ref{ch:magic} and~\ref{ch:magic_results}.};
 \end{tikzpicture}
 \end{center}
 
-\section*{The result in one sentence}
+\begin{center}
+\begin{tikzpicture}[node distance=3.5mm,
+  stage/.style={draw=accent,fill=bluewash,rounded corners=2pt,text width=12.6cm,inner sep=5pt,font=\small},
+  arrow/.style={-{Latex[length=2mm]},draw=ink,thick}]
+\node[stage] (o) {\textbf{15. Run 3.} One network for 1--10\um: it reaches further, costs 8 points at 3\um, and fails on the IC
+coil. Chapter~\ref{ch:run3}.};
+\node[stage,below=of o] (p) {\textbf{16. The review.} Two wire shapes, one seed, 22 variants on one test set: rankings by a few
+points mean nothing. Chapter~\ref{ch:review}.};
+\node[stage,below=of p] (q) {\textbf{17. The limits, split in three.} Measured band, prior band, noise band. Methods differ only in
+the prior band; 16\% of the target is mesh noise. Chapter~\ref{ch:limits}.};
+\node[stage,below=of q] (r) {\textbf{18. Rules first.} A protocol hashed before any score. FISTA was stopped too early: at 1{,}000
+iterations it scores 26.7\%, and raw MAGIC-UNet only ties it. Chapter~\ref{ch:fista_depth}.};
+\node[stage,below=of r] (s) {\textbf{19. Height and data consistency.} Read the standoff from the network's own current, then one
+correction step: 24.3\%, ahead of FISTA for all three seeds, not on IC\_4um. Chapters~\ref{ch:height} and~\ref{ch:consistency}.};
+\node[stage,below=of s] (t) {\textbf{20. COMSOL explained.} Its field decays too fast and breaks Amp\`ere's law in empty air. Keep
+free-space physics. Chapter~\ref{ch:comsol}.};
+\node[stage,below=of t] (u) {\textbf{21. Ten micrometres.} A tile scaled to the blur: 15.8\% on simulation, FISTA 48.8\%. On COMSOL
+FISTA leads, and the extra decay explains part of why. Chapters~\ref{ch:ten} and~\ref{ch:ten_results}.};
+\node[stage,below=of u] (v) {\textbf{22. What next.} The review's map: the current as the primary output, scale normalisation,
+uncertainty, and a data-consistent current-domain solver with a search over height. Chapter~\ref{ch:next}.};
+\foreach \x/\y in {o/p,p/q,q/r,r/s,s/t,t/u,u/v} \draw[arrow] (\x) -- (\y);
+\end{tikzpicture}
+\end{center}
 
-MAGIC-UNet, the unmodified network of Reed et al.\ trained on our simulated wires and never told the standoff, scores
-27.0\% on COMSOL. FISTA at 300 iterations, with no trained layers, scores 30.5\%; the best unrolled network, FISTA-Net,
-33.3\%; and strict Eq.~20 at 64 layers, 33.8\%. All of them beat the Wiener filter's 49.3\% by a wide margin, and every score
-here is an error, so lower is better. MAGIC-UNet's lead holds on one of the two coil shapes, so read
-Chapter~\ref{ch:magic_results} before calling it the winner.
+\section*{The result in two sentences}
+
+At 3\um\ to 0.5\um, MAGIC-UNet, the unmodified network of Reed et al.\ trained on our simulated wires and never told the
+standoff, scores 24.3\% on COMSOL with one data-consistency step that we added, against 26.9\% for FISTA run to its best
+depth (925 iterations); it wins for all three seeds on the 15 pairs and is not distinguishable from FISTA on the IC coil. At 10\um, with
+a tile scaled to the blur, it scores 15.8\% on new simulated layouts against FISTA's 48.8\%, but on COMSOL FISTA is ahead,
+54.3\% against 59.3\%. Every score is an error, so lower is better.
 
 \section*{How to use this booklet}
 
@@ -77,11 +101,13 @@ Chapter~\ref{ch:magic_results} before calling it the winner.
 \texttt{\# ...} where lines are skipped. The file name is above each block.
 \end{itemize}
 
-If you only have an hour, read Chapters~\ref{ch:problem}, \ref{ch:results}, \ref{ch:floor}
-and~\ref{ch:magic_results}. Chapters~\ref{ch:problem} to~\ref{ch:defence} were written on 5 November; Chapters~\ref{ch:floor}
-to~\ref{ch:magic_results} cover 5 to 8 November.
+If you only have an hour, read Chapters~\ref{ch:problem}, \ref{ch:limits}, \ref{ch:consistency}
+and~\ref{ch:ten_results}. Chapters~\ref{ch:problem} to~\ref{ch:defence} were written on 5 November; Chapters~\ref{ch:floor}
+to~\ref{ch:magic_results} cover 5 to 8 November; Chapters~\ref{ch:run3} to~\ref{ch:ten_results} cover 8 to 16 November, and Chapter~\ref{ch:next} the way forward.
 
 \begin{careful}[The numbers in this edition]
-Every table holds a real score from a finished run, except MAGIC-UNet run 3, which is still training and has no numbers
-yet. Each run used one random seed. No number here is a prediction.
+Every table holds a real score from a finished run. One job was still running on 16 November and has no numbers yet:
+FISTA-Net at 10\um. Chapters written before
+10 November compare against FISTA with 300 iterations, which Chapter~\ref{ch:fista_depth} shows was stopped too early: the
+converged baseline is 26.9\% at 925 iterations (26.7\% at 1{,}000), not 30.5\%. No number here is a prediction.
 \end{careful}

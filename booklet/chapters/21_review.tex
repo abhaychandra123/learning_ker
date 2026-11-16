@@ -1,0 +1,206 @@
+\chapter{The review: what the benchmark can and cannot say}\label{ch:review}
+
+On 10 November the whole project was reviewed critically: every document, script, test and saved run. The result is
+\code{FABLE_REVIEW.md}, about 800 lines. This chapter teaches what is in it, because it changed how every number in
+this booklet should be read. The next four chapters are the experiments that the review asked for.
+
+\section{How the review was done}
+
+Nothing was trained. The review read the files, and it ran small NumPy checks on the saved predictions
+(\code{scripts/review_checks.py}, about two minutes). Every statement carries a tag that says how far to trust it:
+\begin{itemize}
+\item \textbf{[file]}: a number read from a repository file or a saved run.
+\item \textbf{[check]}: a number the review computed itself from saved arrays. These used the two COMSOL configurations
+that are on the Mac, so they are diagnostics on test data, not results.
+\item \textbf{[web]} and \textbf{[memory]}: a reference found by a search, or known but not fetched again.
+\item \textbf{[not verified]}: stated in our documents, and not confirmed.
+\end{itemize}
+
+\section{The verdict}
+
+\begin{keyidea}[The review in three sentences]
+The project asks the right question, and its last move, a network that works in the current domain, was the right one.
+But most of the effort had gone into ranking field-domain networks by 1 to 3 points on a benchmark that cannot support
+such rankings. The benchmark has two wire shapes, one seed per method, a noisy target and an unexplained physics
+anomaly, and it had been used to compare more than twenty method variants.
+\end{keyidea}
+
+\section{What went right}
+
+It is worth knowing these too, because they are what you can defend without hesitation.
+\begin{itemize}
+\item \textbf{Test hygiene.} Since the restart, COMSOL is kept out of training, normalisation and model selection, and
+the code enforces it.
+\item \textbf{Faithful baselines.} The MAGIC-UNet port is checked layer by layer against the released model, and the
+run 1 failure was diagnosed, not tuned away.
+\item \textbf{Asking for the limit.} The Wiener oracle and the lost-band floor (Chapter~\ref{ch:floor}) are the right kind
+of question.
+\item \textbf{The ambiguity analysis} of Chapter~\ref{ch:question} is correct, and it is the core of a possible paper.
+\item \textbf{The run 3 diagnosis} is a real finding, not a bug report.
+\end{itemize}
+
+\section{What the ``15 pairs'' really are}
+
+Every score in this booklet is a mean over ``15 COMSOL pairs''. Look at what they are:
+
+\begin{center}
+\small
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{4.4cm}X}
+\toprule
+What it looks like & What it is \\
+\midrule
+15 test images & 5 coil configurations $\times$ 3 field components \\
+5 configurations & 2 wire shapes. \code{C1_C2}, \code{C1_C2_C3} and \code{C1_C2_C3_C4} are mirror copies of
+\code{L1_C1} (correlation 0.97--0.98) \\
+Independent noise in each & The same mesh noise: all four C1 configurations come from one COMSOL solve \\
+Unseen data & The simulator was built around these coils: its layout families, wire widths, current and noise level
+all come from them \\
+One look per method & At least 22 method variants scored on the same 15 pairs. FISTA's $\lambda$ was retuned after
+network scores were known; FISTA-Net got a second run because of its first COMSOL score \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{careful}[What follows from this table]
+Each step was defensible on its own. Together they mean two things. First, the test set measures performance on the two
+shapes the simulator was designed for, not on new geometries. Second, when many variants are tried on one small test
+set, the best one looks better than it is. A difference of 1 to 3 points, on one seed, is not a finding.
+\end{careful}
+
+\section{What went wrong, sorted by cause}
+
+The review sorts the problems into five kinds. This is the useful part: it tells you \emph{which kind} of fix each one
+needs.
+
+\textbf{(a) Information limits.} Part of the 0.5\um\ field is simply not in the 3\um\ measurement. This is real, but the
+``floor'' of 34.5\% in Chapter~\ref{ch:floor} overstates it, because it mixes two different things: real field that was
+lost, and mesh noise in the target that no method could ever reproduce. Chapter~\ref{ch:limits} separates them.
+
+\textbf{(b) Modelling errors.} The blur model $e^{-k\,\Delta z}$ is physics, but COMSOL does not follow it exactly. At
+3\um\ the mismatch is 10--17\%. At 10\um\ it is 64--140\%, more than any real field could decay. Chapter~\ref{ch:comsol}
+finds out why. COMSOL's three components are also not consistent with each other, and MAGIC-UNet's two outputs $J_x$ and
+$J_y$ come from separate decoders, so its current does not conserve charge exactly.
+
+\textbf{(c) Data problems.} Two test shapes, shared mesh noise, a simulator built around them, no sensor noise anywhere,
+and no real measurement.
+
+\textbf{(d) Optimisation and architecture.}
+\begin{itemize}
+\item \emph{CSC-LISTA is under-trained, not data-limited.} At 64 layers it has 49 million parameters, trains for 1{,}000
+steps and keeps the checkpoint from step 100--300. On its \emph{own} training distribution it loses to plain FISTA at the
+same depth with the same dictionary (48.8\% against 45.3\% at 64). A learned network that cannot beat the method it
+starts from has an optimisation problem.
+\item \emph{It is not doing sparse coding.} 99\% of its code values are non-zero. With dense codes it behaves almost like a
+linear filter, which is why it ends up next to the best linear filter (Chapter~\ref{ch:floor}).
+\item \emph{FISTA-300 is not converged.} Its error was still falling from 32 to 64 to 300 iterations, and nobody had run
+1{,}000. Chapter~\ref{ch:fista_depth}.
+\item \emph{MAGIC-UNet has no data-consistency step and a small view.} Nothing forces its output to agree with the
+measurement, and its 12.8\um\ tile is only about four standoffs wide. Chapters~\ref{ch:consistency} and~\ref{ch:ten}.
+\end{itemize}
+
+\textbf{(e) Evaluation.} The metric is taken against a noisy target, with one seed and no error bars, and models are
+selected on 64 crops.
+
+\section{The surprising results, one by one}
+
+For each result that had seemed strange, the review gives the explanation that the evidence supports best, and a cheap
+test that could prove that explanation wrong. Most of these tests were then run.
+
+\begin{center}
+\small
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{3.3cm}>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}p{4.6cm}}
+\toprule
+Result & Best-supported explanation & What the test then showed \\
+\midrule
+CSC-LISTA got worse with 8{,}000 layouts (33.8 to 36.0\%) & Checkpoint and seed noise. Both runs kept a checkpoint from
+step 100--200, before the extra layouts could matter & Not run. The claim ``data volume is not the limit'' of
+Chapter~\ref{ch:followups} is not supported \\
+Learned field-domain networks sit next to the Wiener oracle & With dense codes they act almost linearly, so they can only
+restore the measured band & Holds: they leave 79--82\% of the next band unrecovered (Chapter~\ref{ch:limits}) \\
+FISTA-300 beats every learned field-domain network & FISTA was still improving at 300 iterations; the networks stop at 64
+layers & FISTA is best at 1{,}000 iterations: 26.7\%, not 30.5\% (Chapter~\ref{ch:fista_depth}) \\
+MAGIC-UNet beats methods that were given the standoff & Its current-domain prior fills in frequencies just above what
+the measurement carries & Against FISTA-1000 the raw network only ties; with one correction it wins
+(Chapter~\ref{ch:consistency}) \\
+Run 3 fails on the IC coil & Each tile decides its own height & One global height does not rescue it: 52.0 to 46.9\%
+(Chapter~\ref{ch:height}) \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{keyidea}[Notice the last row]
+The review's own prediction was wrong there, and the document says so. A good review states its explanations in a
+form that an experiment can refute, and then reports the refutation.
+\end{keyidea}
+
+\section{Corrections to earlier chapters of this booklet}
+
+\begin{careful}[Read these before quoting Chapters 9 to 19]
+\begin{itemize}
+\item \textbf{Chapter~\ref{ch:floor}:} ``any method below 34.5\% must be filling in lost frequencies'' is too strong. The
+floor is inflated by noise in the target. See Chapter~\ref{ch:limits}.
+\item \textbf{Chapter~\ref{ch:followups}:} ``data volume is not what limits CSC-LISTA'' and ``the limit is the simulator
+gap'' are not supported by that experiment.
+\item \textbf{Chapter~\ref{ch:defence}:} ``$h$ stays fixed because it is physics and we know it exactly'' is true of physics.
+It is not true of this COMSOL export, which does not obey free-space physics (Chapter~\ref{ch:comsol}).
+\item \textbf{Chapter~\ref{ch:question}:} ``the height cannot come from the field alone'' is right, but the ambiguity is
+\emph{one-sided}. Without any prior the data still give an upper bound on the depth (Chapter~\ref{ch:limits}).
+\item \textbf{Chapters~\ref{ch:results} to~\ref{ch:magic_results}:} every comparison with ``FISTA'' there means FISTA at 300
+iterations, which was stopped too early.
+\end{itemize}
+\end{careful}
+
+\section{What the review said to stop, and to do}
+
+\textbf{Stop:} new CSC-LISTA, LFISTA and FISTA-Net variants; reading differences under about 3 points; reporting
+5--10\um\ COMSOL scores as physics before the decay anomaly is explained; treating $B_x$, $B_y$ and $B_z$ as three
+unrelated images; quoting the lost-band floor as a limit of the problem.
+
+\textbf{Do}, as a list of milestones:
+
+\begin{center}
+\small
+\begin{tabularx}{\textwidth}{l>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}p{4.2cm}}
+\toprule
+ & Milestone & Status on 16 November \\
+\midrule
+M1 & Re-score run 2 and run 3 with a data-consistency step and a height read-out. No training & Done:
+Chapters~\ref{ch:height} and~\ref{ch:consistency} \\
+M2 & Repair the measuring stick: noise edge, scores by band, FISTA run longer, more seeds & Done:
+Chapters~\ref{ch:limits}, \ref{ch:fista_depth}, \ref{ch:consistency} \\
+M3 & Open the COMSOL model and explain the fast decay; export new geometries & First half done:
+Chapter~\ref{ch:comsol}. No new geometries \\
+M4 & Classical test of whether the height can be identified & Not done \\
+M5--M6 & A new solver: learned current prior inside data-consistency steps, with a search over height & Not done \\
+M7--M9 & Generalisation tests, real QDM data, uncertainty & Not done \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+What the review recommends building after these milestones is in Chapter~\ref{ch:next}.
+
+\section{What is already published, and what is left to claim}
+
+The review searched the literature so that you do not claim something that exists.
+
+\textbf{Do not claim as new:} learning the map from field to current (Reed et al.); using all three field components
+(Broadway et al.\ 2020); a sparse or total-variation prior on the current; fitting the sensor distance jointly with
+the source as an idea (Setescak et al.\ 2026, for magnetisation); unrolled networks that are told the blur (USRNet);
+``a network that works without being told the standoff'', \emph{if} Reed et al.\ already trained over $50\pm10$\um.
+The review marks that point as not verified, and Chapter~\ref{ch:magic} explains why it is open.
+
+\textbf{Still open, if the experiments deliver:} inferring the standoff for the whole image with a learned current prior
+and exact physics; the one-sided analysis of the ambiguity with a measured height resolution; a reconstruction that
+states which frequencies came from the data and which from the prior; validation across standoffs and on a real QDM.
+
+\begin{defend}[If your professor asks: was most of the earlier work wasted?]
+No, but it was aimed at the wrong target. The unrolled networks taught us where the limit of field-domain methods is,
+and the review used their saved outputs to show why. What was wasted was the ranking: differences of a few points
+between them were never real.
+\end{defend}
+
+\begin{defend}[If your professor asks: how do you know your winner is not just the luckiest of 22 tries?]
+You do not, from the old test alone. That is why the next step was a protocol written before any new score
+(Chapter~\ref{ch:fista_depth}), three seeds, and a rule fixed in advance for what counts as a win
+(Chapter~\ref{ch:consistency}).
+\end{defend}

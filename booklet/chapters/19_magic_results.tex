@@ -135,7 +135,7 @@ that input is less blurred than anything it trained on. The network learned to e
 \end{itemize}
 \end{keyidea}
 
-\section{Run 3: any standoff (still running)}
+\section{Run 3: any standoff}
 
 You asked whether one network could cover every standoff. The architecture needs no change, because the network never sees
 the height. Only the training range changes. To keep the comparison explainable, run 3 changes \textbf{exactly one thing}
@@ -154,7 +154,7 @@ Everything else & \multicolumn{2}{c}{identical: network, $64\times64$ tiles, cro
 
 The range 1--10\um\ is exactly the span of the COMSOL inputs. The paper trained one model per standoff range, so a single
 1--10\um\ model is our adaptation. Larger tiles were considered for large standoffs and dropped, to stay close to the
-paper. Run 3 was launched on 8 November and was still running when this edition was written.
+paper. Run 3 was launched on 8 November. Its results are in Chapter~\ref{ch:run3}.
 
 \begin{careful}[What to expect from run 3]
 At large standoffs most of the target is missing from the data (Chapter~\ref{ch:floor}: 56--73\% at 10\um), so no method will
@@ -210,6 +210,12 @@ Inside its training range, partly: one network reconstructs at 2, 3 and 4\um\ wi
 it fails, and it never outputs a height or an uncertainty. Run 3 tests the first point; the second needs the methods in
 Chapter~\ref{ch:question}.
 \end{defend}
+
+\begin{careful}[Since this chapter was written]
+All four steps above were done between 9 and 12 November. They changed the picture: FISTA had been stopped too early,
+and the lead of MAGIC-UNet now rests on one added correction step. Read Chapters~\ref{ch:run3} to~\ref{ch:consistency} before
+quoting any number from this chapter. Chapter~\ref{ch:ten} takes the method to 10\um.
+\end{careful}
 
 \section{What is not yet known}
 

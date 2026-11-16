@@ -12,6 +12,13 @@ question needs: \textbf{it is trained over a range of standoffs and is never tol
 from $50\pm10$\um\ for every training image. So one trained network handles an unknown standoff inside that range.
 \end{keyidea}
 
+\begin{careful}[Not yet verified]
+This reading of the paper is ours. One of our own notes (\code{RESEARCH_BEYOND_ISTA.md}) says the authors used a
+\emph{fixed} standoff of about 50\um, and a search summary said the same. Supplement D of the paper settles it, and it
+has not been re-read. It matters: it decides whether ``works without being told the standoff'' is already in the
+paper. Until it is checked, say ``we train over a standoff range, as we read the paper''.
+\end{careful}
+
 \section{What they did}
 
 \begin{center}

@@ -45,8 +45,10 @@ The review text below is kept as written; where M1/M2 changed a claim, a marked 
    threshold and these ratios are norm ratios, as in my original check.) FISTA-1000 is at 59%: run to its best depth,
    it recovers more of the prior band than the learned field-domain networks. MAGIC-UNet run 2 is at 45% [M1/M2].
 6. **Every saved Group B model reproduced its COMSOL scores exactly** when re-run with its own frozen code [M1/M2].
-7. **Seeds (M2e): still running when this was written.** The seed spread of run 2, raw and corrected, decides whether
-   the 0.8-point IC margin over FISTA-1000 is a difference. See `M1_M2_RESULTS.md` §M2e.
+7. **Seeds (M2e), finished 11 November.** Three seeds of run 2 with the correction score 24.3 / 24.5 / 24.5% on the 15
+   pairs (range 0.2 points) and 23.8 / 23.7 / 22.9% on the C1 family: every seed is below FISTA-1000 (26.7%, 26.6%). On
+   IC_4um they score 26.4 / 27.5 / 30.9% against 27.2%, so by the rule fixed beforehand (amendment A4) the IC result is
+   "not distinguishable". Raw run 2 (27.0 / 27.2 / 26.7%) ties FISTA-1000 [M1/M2].
 
 ---
 

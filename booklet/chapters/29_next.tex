@@ -1,0 +1,225 @@
+\chapter{Where the review says to go next}\label{ch:next}
+
+Chapter~\ref{ch:review} covered what the review found. This chapter covers what it recommends: what the output of a
+paper should be, what each kind of prior can learn, which kinds of generalisation are still untested, how to add
+uncertainty, and the method it proposes. Nothing here has been built yet. It is the map for after the evaluation.
+
+\section{Which output should come first}
+
+The project has always treated the field at 0.5\um\ as the goal, and the current as a step on the way. The review argues
+for the reverse.
+
+\begin{itemize}
+\item The 0.5\um\ field and the equivalent sheet current carry the \emph{same} information. Chapter~\ref{ch:magic} showed
+that one follows from the other by exact physics.
+\item But only the current can be checked in a real experiment: against the lithography mask that made the wires, and
+against the current that was driven through them.
+\item A 0.5\um\ field on a 0.1\um\ grid can never be measured on a real QDM. Its optical resolution is of the order of the
+wavelength of light.
+\end{itemize}
+
+\begin{keyidea}
+A paper whose ground truth can never exist outside a simulation is hard to defend at a physics venue. Report the
+current as the primary result, and the near field as a consequence of it.
+\end{keyidea}
+
+\section{What each kind of prior learns}
+
+Chapter~\ref{ch:limits} showed that methods differ only in the prior band. So the question is what each prior knows.
+
+\begin{center}
+\small
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{3.6cm}X}
+\toprule
+Prior & What it knows \\
+\midrule
+Field-domain dictionary (FISTA, CSC-LISTA) & 32 atoms, each a 7.5\um\ patch of field at 0.5\um. Fields of wires are smooth and
+overlap, so many atoms are needed everywhere, the codes come out dense, and the prior is weak \\
+Current-domain network (MAGIC-UNet) & Currents are compact, piecewise constant, of one amplitude and continuous. That is a
+much stronger statement, and it supports filling in detail past $k_c$ \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{careful}[The open question]
+Is the network recovering structure, or recalling the simulator's shapes? Both test coils are rectangular spirals of the
+simulated width. Until it is tested on something outside the simulator's families (curves, diagonals, pads, two current
+levels, two layers), there is no evidence either way. Chapter~\ref{ch:ten_results} makes this question sharper, not
+smaller.
+\end{careful}
+
+One product no other method offers, and it is cheap: for each reconstruction, report which frequencies were supported
+by the data (below $k_c$, for the estimated height and noise) and which came from the prior. That is a direct answer to
+``how do you handle the ambiguity''.
+
+\section{Which kinds of generalisation are tested}
+
+\begin{center}
+\small
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{3.4cm}>{\raggedright\arraybackslash}p{2.2cm}X}
+\toprule
+Axis & Tested? & Status on 16 November \\
+\midrule
+Standoff, known & Partly & FISTA at 3 and 10\um \\
+Standoff, unknown & Partly & Run 2 in 2--4\um; run 3 across 1--10\um; run B across 6--14\um\ on simulation \\
+Geometry & No & Two shapes, both in the simulator's families \\
+Wire width, thickness & No & \\
+Field of view & No & Fixed 140\um\ image \\
+Pixel pitch & No & 0.1\um\ input; the network works at 0.2 or 0.7\um\ after averaging \\
+Noise level and type & No & One synthetic family; no sensor noise \\
+Current amplitude & Implicitly & Each tile is scaled by its own maximum; one current in all data \\
+Real measurement & No & \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{Magnetostatics has no ruler}
+
+This is the most useful idea in the review's recommendations, and you have already seen a rough version of it.
+
+Look at the blur, $e^{-k\,\Delta z}$. If you double every length in the problem, $k$ halves and $\Delta z$ doubles, and the
+product $k\,\Delta z$ does not change. So a 2\um\ wire seen from 10\um\ is exactly the same picture as a 1\um\ wire seen
+from 5\um, drawn at a different scale. The physics has no built-in length.
+
+\begin{keyidea}[What follows]
+Resample every input so that the standoff is a fixed number of \emph{pixels}. Then every standoff becomes the same problem,
+with only the wire width in pixels changing. One network trained at that one normalised standoff would serve every
+physical standoff, and every pixel pitch too.
+\end{keyidea}
+
+Now look back at Chapter~\ref{ch:ten}. Run B's 0.7\um\ pixels did a crude version of exactly this. Run 2 saw a 3\um\
+standoff as 15 pixels of 0.2\um. Run B sees a 10\um\ standoff as about 14 pixels of 0.7\um. That is why the same network,
+unchanged, works at 10\um\ once the pixels are scaled: in pixels, it is nearly the problem it already knew how to solve.
+The full idea needs a height hypothesis to resample with, and the height search below provides one.
+
+\section{Uncertainty, in order of cost}
+
+Nothing in the project outputs an uncertainty yet. From cheapest to most expensive:
+\begin{enumerate}
+\item \textbf{Seeds.} The spread of scores over several trained copies, and a per-pixel spread of their outputs. Three
+seeds exist at 3\um\ (Chapter~\ref{ch:consistency}).
+\item \textbf{A height interval.} Plot the data misfit against the hypothesised height, report the range of heights that
+fit about equally well, and check on simulated data how often the true height falls inside it.
+\item \textbf{The data-supported and prior-filled bands} of the previous section.
+\item \textbf{Conformal intervals,} calibrated on simulated data and then checked on COMSOL and real data. Expect them to
+break under the gap between simulator and reality; reporting that honestly is useful in itself.
+\item \textbf{Posterior samples} from a diffusion prior (candidate B below), for a machine-learning venue.
+\end{enumerate}
+
+\section{Physics errors a learned model could absorb or hide}
+
+A network trained on wrong physics does not complain. It quietly learns the error. The review lists the ones to watch:
+\begin{itemize}
+\item COMSOL's extra decay. A network trained on COMSOL fields would learn it silently. Keeping it out of the simulator
+was right, and Chapter~\ref{ch:ten_results} showed what it does to a network that never saw it.
+\item The quarter-turn of COMSOL's components. Now traced to the export (Chapter~\ref{ch:comsol}).
+\item Mesh noise shared between configurations. Harmless while COMSOL stays out of training; a leak the moment it enters.
+\item Sheet currents against conductors of finite thickness, the thickness of the NV layer, and optical blur on a real
+QDM. All three act like extra standoff (Chapter~\ref{ch:limits}).
+\item MAGIC-UNet's current does not have to conserve charge, because $J_x$ and $J_y$ come from separate decoders.
+\item Scaling each tile by its own maximum hides the absolute strength from the network, and makes empty tiles pure
+noise. The run 1 bug was a symptom of this.
+\item Zero padding, where COMSOL's walls force the normal field to zero.
+\end{itemize}
+
+\section{The method the review recommends}
+
+\textbf{Method A: a data-consistent current-domain solver with a search over height.} Five parts, each with a published
+ancestor:
+
+\begin{enumerate}
+\item \textbf{Unknown: a stream function $g$}, one scalar image, with the current $J=\nabla\times(g\,\hat z)$. Then the
+current conserves charge by construction, and $B_x$, $B_y$, $B_z$ at any height follow from $g$ by the Fourier relations
+already in \code{simulate_fields.py}.
+\item \textbf{Scale normalisation:} resample the input so the hypothesised standoff is a fixed number of pixels (the
+section above).
+\item \textbf{Network:} a MAGIC-UNet-style encoder and decoder with one output, $g$, used as the learned prior inside a few
+unrolled stages. Each stage alternates the closed-form data-consistency step of Chapter~\ref{ch:consistency}, on all
+three components, with a learned correction to $g$, in the manner of USRNet. Tiles at least 8 standoffs wide.
+\item \textbf{Height:} an outer search. For each candidate height on a grid, resample, reconstruct, then score by the data
+misfit and by how much the network had to correct. Report the best height, the interval where the score stays within
+a calibrated tolerance, and one reconstruction per supported height when the interval is wide.
+\item \textbf{Training:} the simulator with wider variety: curved and diagonal wires, widths over a decade, two current
+levels, finite thickness, white and correlated noise, optical blur. COMSOL and real data stay test-only.
+\end{enumerate}
+
+\begin{keyidea}[Why this method, for this project]
+\begin{itemize}
+\item The one experiment we have points to it: one data-consistency step after MAGIC-UNet took 27.0\% to 24.3\%.
+\item The run 3 failure and the read-out test of Chapter~\ref{ch:height} say the height must be chosen by
+\emph{reconstructing at each candidate height}, not by re-projecting one prediction. Part 4 does exactly that.
+\item Every block has a published ancestor (MAGIC-UNet, USRNet, stream-function priors, the joint distance fit of
+Setescak et al.), which respects the rule of published parts with a clearly labelled contribution.
+\item It reuses the simulator, the Biot--Savart code and the MAGIC-UNet port.
+\end{itemize}
+\end{keyidea}
+
+The candidates it was compared with:
+
+\begin{center}
+\small
+\begin{tabularx}{\textwidth}{l>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}p{3.6cm}}
+\toprule
+ & Candidate & Verdict \\
+\midrule
+A & The method above & Build it \\
+B & A diffusion prior on $g$, sampled so that it agrees with the measurement, with the height as a variable & Uncertainty
+comes naturally, but training is slow and guidance through such a steep blur is unstable. A second paper \\
+C & A Fourier neural operator & No clear advantage over a CNN after resampling \\
+D & An untrained network with the exact physics as its loss, height as a free parameter (Dubois et al.) & No simulator gap
+at all. Build it anyway as a baseline \\
+E & Classical total variation on the stream function, at a grid of heights & A baseline and the identifiability test in
+one. Build it anyway \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{The one claim a paper could make}
+
+\begin{keyidea}[The claim, as the review writes it]
+The standoff of a magnetic image can be inferred, with an honest interval, from the image itself once a learned current
+prior and exact field physics are combined. Doing so gives better current and near-field reconstructions than methods
+that are told the standoff, across a tenfold range of standoffs, and the reconstruction states which part of it the data
+support.
+\end{keyidea}
+
+What a reviewer would demand, and what exists: baselines (Fourier inversion, total variation on the stream function, an
+untrained network, MAGIC-UNet as published, FISTA; we have the last two); data sets (held-out simulated families, ten or
+more new finite-element geometries with correct physics, one real QDM measurement with a calibrated standoff; we have two
+shapes with an anomalous decay); ablations of every ingredient; three or more seeds; and a test protocol written before
+the final runs. The review's realistic venues are Physical Review Applied or IEEE Transactions on Computational Imaging,
+with a real measurement.
+
+\section{The five biggest risks}
+
+\begin{enumerate}
+\item \textbf{The benchmark is not valid evidence.} Two shapes, a non-physical decay, inconsistent components, a noisy
+target. Fix the data before comparing methods further; a real measurement for the paper.
+\item \textbf{The learned prior has memorised the simulator's shapes and widths.} Every gain so far is on coils the
+simulator was built around. Test on held-out families and new shapes, and keep the untrained-network and total-variation
+baselines next to every result, since they have nothing to memorise.
+\item \textbf{The height is not identifiable tightly enough to be useful.} The valley is shallow at 3\um\ and will be
+shallower higher up, and width and thickness bias it. Report an effective standoff with an interval. Keep the fallback
+paper in view: reconstruction given a calibrated standoff, with its sensitivity to errors in that standoff.
+\item \textbf{The novelty is thinner than it looks.} MAGIC-UNet already maps field to current, possibly over a standoff
+range; Setescak et al.\ already fit the sensor distance jointly. Re-read both in full.
+\item \textbf{Statistical fragility.} One seed, many variants on 15 pairs, choices informed by earlier scores. Write the final
+protocol first, freeze a new test set no method has seen, use three seeds, and report every run.
+\end{enumerate}
+
+A sixth, practical one: one GPU and one person. Method A fits that budget; a diffusion prior and a wide architecture
+search do not.
+
+\begin{defend}[If your professor asks: what would you do with three more months?]
+Build method A: a stream-function output so the current conserves charge, inputs resampled so the standoff is a fixed
+number of pixels, a learned prior inside a few data-consistency steps, and a search over height that reconstructs at
+each candidate and reports an interval. Test it on new geometries and on one real QDM measurement with a calibrated
+standoff, against an untrained network and total variation, which have no simulator to memorise.
+\end{defend}
+
+\begin{defend}[If your professor asks: what is genuinely new here?]
+Not learning field to current, not using all three components, and not fitting the distance jointly as an idea: all of
+those exist. What is open is inferring the standoff for the whole image with a learned current prior and exact physics,
+the one-sided analysis of the ambiguity with a measured height resolution, and a reconstruction that says which
+frequencies came from the data and which from the prior.
+\end{defend}
