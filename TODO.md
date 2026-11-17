@@ -12,20 +12,30 @@ chats "Final evaluation preparation", "fable milestoes", "syn fix" and this one.
 
 ## 0. Before the evaluation on 20 November
 
-- [ ] **FISTA-Net at 10 µm.** Training finishes about 16:30 on 17 November. Score it with
-  `scripts/score_high_standoff_methods.py fista_net`, then add it to the like-for-like table and every 10 µm table,
-  figure and booklet chapter 28. *(This chat)*
-- [ ] **Report and presentation.** `final_evaluation/06_report/` and `07_deck/` are still empty. Needed: the IITB
-  template, the page limit and the talk length. *(Final evaluation plan)*
+- [x] **FISTA-Net at 10 µm.** Finished 17 November: best checkpoint step 500 (validation 129%), 91.4% on simulation,
+  91.1% on COMSOL. Added to the like-for-like table, every 10 µm table and figure, and booklet chapter 28. *(This chat)*
+- [ ] **Presentation:** you are building it (30 minutes with questions, .pptx in the style of the 4 November deck).
+  The material is in `final_evaluation/01_journey/JOURNEY.md`, section "For the presentation".
+- [ ] **Report:** `final_evaluation/06_report/` is still empty. Needed: the IITB template and the page limit.
+  *(Final evaluation plan)*
 - [ ] **Timing table.** Inference time per method on the same GPU: FISTA at its best depth against one MAGIC-UNet pass
   plus the correction. Evaluators will ask; it was never measured for the final methods. *(Final evaluation plan)*
-- [ ] **Figures for phase 7 at 3 µm.** Corrected MAGIC-UNet next to FISTA and the truth on one colour scale, and a seed
-  bar chart. The predictions exist on the server. *(final_evaluation/README.md)*
+- [x] **Figures for phase 7 at 3 µm, one colour scale:** `final_evaluation/04_figures/p7_m1_m2/comsol3_*_maps.png`
+  (17 November; `scripts/export_3um_figures.py`). A seed bar chart is still missing. *(final_evaluation/README.md)*
 - [ ] **Check Supplement D of Reed et al.** Did they train over 50 ± 10 µm, or at a fixed ~50 µm? It decides how much of
   "works without being told the standoff" is new. `RESEARCH_BEYOND_ISTA.md` §4 still says "fixed".
   *(Review §1.4, final_evaluation/README.md)*
-- [ ] **Experimental data and the new COMSOL export.** Being analysed in the "syn fix" chat, which was asked to put its
-  results into every document. Check that it did before the evaluation. *(syn fix)*
+- [x] **Experimental data and the new COMSOL export.** Done by the "syn fix" chat on 17 November: real-data results in
+  `final_evaluation/02_source_docs/p10_experimental/README_EXPERIMENTAL.md`, the COMSOL re-solve in `README_COMSOL_MODEL.md` §9,
+  both added to JOURNEY, the scoreboard and the booklet. *(syn fix)*
+- [x] **FISTA-Net on the deep real-data maps (cases 3 and 6).** Rerun 17 November with the final checkpoint, which is
+  still step 500, so the real-data rows were already final (the rerun reproduced them). *(syn fix, 17 November)*
+- [x] **Score the methods on the re-solved COMSOL L1_C1** (amendment A7, finished 17 November). 10 µm, original →
+  re-solved: MAGIC-UNet 60.4 → 26.2%, FISTA 49.8 → 47.2%, FISTA-Net 90.6 → 90.6%, CSC-LISTA 99.6 → 98.0%, Tikhonov
+  98.7 → 98.1% (the last three with 3 µm settings). 3 µm: MAGIC-UNet 23.9 → 22.0%, FISTA-925 26.7 → 25.8%. On this one
+  coil the 10 µm order reverses. FISTA-Net's reproduction gate failed by 0.03–0.04 point (reported with the flag).
+  README_HIGH_STANDOFF §8, JOURNEY, SCOREBOARD, booklet §28.8. *(This chat)*
+- [ ] **Send the group a follow-up** with the full re-solved table (draft in `reports/group_update_resolve/followup.md`).
 
 ## 1. A fair comparison at 10 µm
 
@@ -88,10 +98,14 @@ Details: `README_HIGH_STANDOFF.md` §7.3. *(This chat, 17 November)*
 
 *(Review M3, README_COMSOL_MODEL.md "Options")*
 
-- [ ] **Ask Hari for one re-solve** of L1_C1 with a direct solver (or a much tighter tolerance), exported at 0.5, 3 and
-  10 µm, or for curl B in the air domain. If k₀ disappears, COMSOL above 4 µm becomes a valid test.
-- [ ] **No-re-solve check:** integrate B·dl around a closed square in a vertical plane in the air of the existing
-  solution. Physics gives zero.
+- [x] **Re-solve of L1_C1 at a tight tolerance** (Ritaban, 17 November, relative tolerance 1e-8; the direct solver
+  fails on this model). k₀ disappears; free space matches COMSOL to 3–5% at 10 µm (`README_COMSOL_MODEL.md` §9).
+- [x] **Ampère's law in the re-solve** (17 November): a single-plane test (`ampere_single_plane.py`) gives
+  B_z / [i k·B_t / k] = 1.00 in every band at 3 and 10 µm, where the original export followed the screened law. The air
+  current was numerical (`README_COMSOL_MODEL.md` §10).
+- [ ] **Re-solve the rest at the same tolerance:** the other L1_C1 heights, data3 (C1+C2, C1+C2+C3, C1–C4) and the IC
+  model. Every COMSOL file except L1_C1 at 0.5, 3 and 10 µm still carries the artefact, and the 3 µm benchmark inputs
+  were off by 10–23%. Then rescore every method: only that makes the 10 µm reversal on L1_C1 (MAGIC-UNet 26.2%, FISTA 47.2%) more than one coil.
 - [ ] **A calibration case** with an exact answer (one straight wire or one loop) in the same box and mesh.
 - [ ] **The IC coil's model report** (`interconnects_F.mph`), which we never received.
 - [ ] **At least ten new geometries** the simulator has never drawn, several widths, five or more heights. Today there
@@ -101,10 +115,19 @@ Details: `README_HIGH_STANDOFF.md` §7.3. *(This chat, 17 November)*
 
 ## 5. Real QDM data
 
-*(Review M8; the "syn fix" chat is working on the experimental maps now)*
+*(Review M8)*
 
-- [ ] **Finish the experimental-data analysis** started in "syn fix" (six B-field maps in `Experimental data/`,
-  `scripts/experimental/`): fitted standoff, MAGIC-UNet's height read-out, agreement with a fitted-coil reference.
+- [x] **First analysis of the six experimental maps** ("syn fix", 17 November): every method compared against the fitted
+  design; no learned method beats Tikhonov or FISTA on the near field; MAGIC-UNet run 10b recovers the wire layout.
+  `final_evaluation/02_source_docs/p10_experimental/README_EXPERIMENTAL.md`.
+- [ ] **Ask Ritaban** for the NV axis in the image frame, the standoff and coil depths (are cases 3 and 6 a buried
+  layer?), the current per case, the pixel size, and what differs between cases 1 and 4. Then re-run the real-data
+  scores with those instead of the fitted values.
+- [ ] **Train on real-QDM-like inputs:** noise correlated over 1 µm pixels, NV-projected inputs, background offsets and
+  gradients, a camera seam. On the real maps, the 0.2 µm-pixel networks turned correlated noise into false currents.
+- [ ] **Score the current against the fabrication mask** (wire positions, widths, integrated current) instead of a
+  fitted drawing whose leads do not match the device.
+- [ ] **Check case 6's fitted orientation** (MAGIC-UNet draws a spiral offset from the fitted outline).
 - [ ] **A measurement with an independently calibrated standoff.** Image a wire of known width and current, fit its
   standoff from the line profile, then image a second structure in the same session. Compare estimated against
   calibrated standoff, the current map against the mask, and the integrated current against the driven current.

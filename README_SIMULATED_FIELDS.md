@@ -1,5 +1,9 @@
 # Simulated fields from random current layouts
 
+> **Update 17 November 2026.** The "faster decay" and "large standoff" mismatch with COMSOL described below was
+> COMSOL's solver tolerance, not physics: a re-solve at tolerance 1e-8 obeys free-space decay and matches this
+> simulator (with the exact coil) to 3–9% at 10 µm. See `README_COMSOL_MODEL.md` §9–10.
+
 Training and COMSOL results on this data: [README_CSC_LISTA.md](README_CSC_LISTA.md).
 
 31 October 2026. Restart at one standoff pair, 3 → 0.5 µm. This generates

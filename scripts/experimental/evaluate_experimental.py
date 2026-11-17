@@ -60,13 +60,45 @@ def field_on_grid(arr, r):
     return g
 
 
-def scores(pred, ref, m):
-    e, c = [], []
+KG = 2*np.pi*np.fft.fftfreq(NB, 0.5)
+KK = np.hypot(*np.meshgrid(KG, KG))
+
+
+def lowpass(a, kc):
+    a = np.nan_to_num(a)
+    return np.real(np.fft.ifft2(np.fft.fft2(a)*(KK < kc)))
+
+
+def snr_crossing(case):
+    """k (rad/um) where the fitted coil's B_NV spectrum falls to the measured white-noise level (SNR = 1)."""
+    f = np.load(glob.glob(os.path.join(os.path.dirname(PREP), "fit_all", f"fit_{case}.npz"))[0])
+    sig, d = f["signal"], f["data"]
+    dd = np.diff(d[20:-20, 100:-20], axis=1)                  # robust: fit-failure spikes must not count as noise
+    sigma = 1.4826*np.median(np.abs(dd - np.median(dd)))/np.sqrt(2)
+    S = np.abs(np.fft.fft2(sig)); n = sig.shape[0]
+    k1 = 2*np.pi*np.fft.fftfreq(n, 1.0); K1 = np.hypot(*np.meshgrid(k1, k1))
+    noise = sigma*n                                      # |FFT| of white noise per mode
+    edges = np.arange(0.1, np.pi, 0.05)                 # skip k < 0.1: a sheet current has ~no net Bz there
+    for lo, hi in zip(edges[:-1], edges[1:]):
+        m = (K1 >= lo) & (K1 < hi)
+        if m.any() and np.sqrt(np.mean(S[m]**2)) < noise:
+            return float(lo), float(sigma)
+    return float(np.pi), float(sigma)
+
+
+def scores(pred, ref, m, kc=None):
+    e, c, el = [], [], []
     for i in range(3):
         p, t = pred[i][m], ref[i][m]
         e.append(float(np.linalg.norm(p - t)/np.linalg.norm(t)))
         c.append(float(np.corrcoef(p, t)[0, 1]))
-    return dict(rel_l2=float(np.mean(e)), rel_l2_components=e, corr=float(np.mean(c)))
+        if kc is not None:
+            pl, tl = lowpass(pred[i], kc)[m], lowpass(ref[i], kc)[m]
+            el.append(float(np.linalg.norm(pl - tl)/np.linalg.norm(tl)))
+    out = dict(rel_l2=float(np.mean(e)), rel_l2_components=e, corr=float(np.mean(c)))
+    if kc is not None:
+        out["rel_l2_lowpassed"] = float(np.mean(el))
+    return out
 
 
 results, preds = {}, {}
@@ -78,7 +110,9 @@ for case, m in meta.items():
     msk = box(case)
     regime = 10 if m["standoff_fit_um"] >= 6.5 else 3
     best = "run10b" if regime == 10 else "run2"
-    res = dict(standoff_fit_um=m["standoff_fit_um"], regime_um=regime, magic_rule_run=best, magic={}, methods={})
+    kc, sigma = snr_crossing(case)
+    res = dict(standoff_fit_um=m["standoff_fit_um"], regime_um=regime, magic_rule_run=best, k_snr1=kc,
+               noise_uT=sigma, magic={}, methods={})
     for run in ("run2", "run3", "run10b"):
         k = f"{case}_{run}"
         if f"{k}_dc05" not in M.files:
@@ -88,8 +122,8 @@ for case, m in meta.items():
                    np.sqrt(np.sum(j[:, msk]**2)*np.sum(refj[:, msk]**2)))
         out_share = float(np.sqrt(np.sum(j[:, ~box(case, 12.0)]**2)/np.sum(j**2)))
         r = MJ[f"{case}/{run}"]
-        res["magic"][run] = dict(h_star=r["h_star"], raw=scores(M[f"{k}_raw05"], ref, msk),
-                                 dc=scores(M[f"{k}_dc05"], ref, msk), current_corr_box=jc,
+        res["magic"][run] = dict(h_star=r["h_star"], raw=scores(M[f"{k}_raw05"], ref, msk, kc),
+                                 dc=scores(M[f"{k}_dc05"], ref, msk, kc), current_corr_box=jc,
                                  current_share_far_from_coil=out_share)
         preds[(case, f"magic_{run}")] = M[f"{k}_dc05"].astype(float)
     preds[(case, "magic")] = preds.get((case, f"magic_{best}"))
@@ -98,7 +132,7 @@ for case, m in meta.items():
         if (case, meth) in field:
             g = field_on_grid(*field[(case, meth)])
             ok = msk & np.isfinite(g[0])
-            res["methods"][meth] = dict(scores(g, ref, ok), setting=field[(case, meth)][1]["setting"],
+            res["methods"][meth] = dict(scores(g, ref, ok, kc), setting=field[(case, meth)][1]["setting"],
                                         dz_used_um=field[(case, meth)][1]["dz_used_um"])
             preds[(case, meth)] = g
     preds[(case, "ref")] = ref
@@ -110,9 +144,9 @@ print(f"{'case':6s} {'h_fit':>6s}  " + "  ".join(f"{LABEL[k]:>12s}" for k in ("m
 for case, r in results.items():
     cells = []
     for k in ("magic", "fista", "fistanet", "csc", "tikhonov"):
-        s = r["methods"].get(k)
-        cells.append(f"{100*s['rel_l2']:5.0f}% c{s['corr']:+.2f}" if s else f"{'n/a':>12s}")
-    print(f"{case:6s} {r['standoff_fit_um']:6.2f}  " + "  ".join(f"{c:>12s}" for c in cells))
+        s = r["methods"].get(k) if r["methods"].get(k) else None
+        cells.append(f"{100*s['rel_l2']:4.0f}/{100*s['rel_l2_lowpassed']:3.0f}% c{s['corr']:+.2f}" if s else f"{'n/a':>16s}")
+    print(f"{case:6s} {r['standoff_fit_um']:6.2f} kc {r['k_snr1']:.2f}  " + "  ".join(f"{c:>16s}" for c in cells))
 print("\nMAGIC runs (corrected): h* / field rel L2 in box / current corr in box / current share far from coil")
 for case, r in results.items():
     print(case, {run: (round(v["h_star"], 2), round(100*v["dc"]["rel_l2"]), round(v["current_corr_box"], 2),
@@ -157,7 +191,7 @@ for case in results:
         img = -preds[(case, k)][2]
         a.imshow(img, origin="lower", extent=[0, 161, 0, 161], cmap="RdBu_r", vmin=-L, vmax=L)
         s = results[case]["methods"].get(k) if k != "ref" else None
-        tag = "" if s is None else f"\nerror {100*s['rel_l2']:.0f}%, corr {s['corr']:+.2f}"
+        tag = "" if s is None else f"\nerror {100*s['rel_l2']:.0f}% (in band {100*s['rel_l2_lowpassed']:.0f}%)"
         if k == "magic":
             name += f" ({results[case]['magic_rule_run']} + DC)"
         a.set_title(name + tag, fontsize=10); zoom(a, case); outline(a, case)
@@ -165,7 +199,7 @@ for case in results:
     fig.tight_layout(); fig.savefig(f"{FIGS}/methods_{case}.png", dpi=110); plt.close(fig)
 
 # 3. MAGIC current maps, every run
-cases = list(results)
+cases = [c for c in results if results[c]["magic"]]
 fig, ax = plt.subplots(len(cases), 4, figsize=(15.5, 3.9*len(cases)))
 ax = np.atleast_2d(ax)
 for r, case in enumerate(cases):
@@ -183,7 +217,7 @@ for r, case in enumerate(cases):
         v = results[case]["magic"][run]
         a.set_title(f"MAGIC-UNet {run}: h* = {v['h_star']:.1f} µm\ncurrent corr {v['current_corr_box']:+.2f}", fontsize=10)
         zoom(a, case); outline(a, case)
-fig.suptitle("Predicted sheet current |J| on the real QDM maps (green: designed spiral, fitted position)", fontsize=12)
+fig.suptitle("Predicted sheet current |J| on the real QDM maps (green: designed spiral, fitted position)", fontsize=12, y=1.0)
 fig.tight_layout(); fig.savefig(f"{FIGS}/magic_currents.png", dpi=95); plt.close(fig)
 
 # 4. heights

@@ -5,7 +5,33 @@ L1_C1 model at two mesh densities, new L1_C1 exports at 0.5 and 3 µm for each m
 geometry `Gemetry_C1.dxf`. All numbers below were computed by the scripts in `scripts/comsol_check/` (commands at the
 end). Nothing was trained. The simulator and the operators were not changed.
 
-## Short answer
+## Update, 17 November 2026: cause confirmed (section 9)
+
+Ritaban re-solved L1_C1 (Extra Fine mesh) with the iterative solver at **relative tolerance 1e-8**
+(`COMSOL_params_v2/Extra_Fine_Mesh/FGMRES_RT1e-8/`, 0.5, 3 and 10 µm). The direct solver could not be used: it fails
+on this model with "relative error 1.1e+04, returned solution is not converged" (screenshot in the same folder), the
+signature of a singular system (vector-potential formulation without gauge fixing). In the re-solve:
+
+- **k₀ is gone.** Every band decays at rate k, as free space requires (k = 0.048 → 0.048, k = 0.109 → 0.103 rad/µm,
+  3 → 10 µm), where the original solve gave k₀ ≈ 0.10.
+- **Free-space propagation now agrees with COMSOL:** COMSOL's 0.5 µm field propagated to 10 µm misses its 10 µm plane
+  by **3.8 / 4.5 / 3.1%** (original: 57 / 52 / 41%).
+- **Our exact-coil simulator now matches COMSOL in pure free space** (walls, no k₀): **3.2 / 3.2 / 9.3% at 10 µm**
+  (original: 65 / 58 / 129%), 9.5 / 8.7 / 8.5% at 3 µm.
+- The original exports differ from the re-solve by **3 / 3 / 8% at 0.5 µm, 10 / 10 / 23% at 3 µm and 60 / 67 / 120%
+  at 10 µm**. So the main 3 → 0.5 µm benchmark inputs were also off by 10–23%.
+
+- **Ampère's law now holds in the air.** On a single plane, B_z / [i(k·B_t)/k] must be 1 in every band in
+  source-free air (section 10). The original export gives 0.32–0.97 for k = 0.03–0.3 rad/µm, tracking the screened law
+  k/√(k² + 0.10²); the re-solve gives **1.00 in every band at 3 and 10 µm**.
+
+So the extra decay, and the Ampère violation that came with it, was the default solver tolerance, and the free-space
+generator was right. Figure:
+`final_evaluation/04_figures/p8_comsol_check/tolerance_resolve.png`. The only re-solved data are L1_C1 at 0.5, 3 and
+10 µm; every other COMSOL file (other heights, data3, IC_4um from `interconnects_F.mph`) still carries the artefact
+until it is re-exported with the tight tolerance.
+
+## Short answer (14 November, before the re-solve)
 
 **Why our simulated fields failed at high standoff:** COMSOL's field in the air above the coil does not obey
 magnetostatics. Between every pair of exported planes, its low spatial frequencies decay at the rate √(k² + k₀²), not
@@ -166,6 +192,71 @@ The rise in Bz at 10–20 µm comes from the periodic FFT canvas (205 µm here):
 the padding generous when generating high-standoff data. The generator returns fields in COMSOL's CSV label
 convention (physical B_col = By_out, B_row = −Bx_out, Bz = −Bz_out, overall sign set by current direction).
 
+### 9. The tight-tolerance re-solve (17 November)
+
+Side-by-side figures of the two solves: `final_evaluation/04_figures/p8_comsol_check/resolve_vs_old_maps.png` (Bz at 0.5, 3 and 10 µm: original export, re-solve and our simulator for the exact coil, with differences), `resolve_vs_old_linecut.png` (line cuts at 3 and 10 µm, all three versions) and `resolve_vs_old_why.png` (amplitude lost per frequency, and how much of the field is broad structure at each height); script `scripts/comsol_check/plot_resolve_vs_old.py`.
+
+`tolerance_check.py` (and `plot_tolerance.py` for the figure) on `COMSOL_params_v2/Extra_Fine_Mesh/FGMRES_RT1e-8/`.
+Same model, same Extra Fine mesh, iterative solver (FGMRES) at relative tolerance 1e-8 instead of the default. Other
+files in `COMSOL_params_v2` are byte-identical to `COMSOL_params` (checked by MD5).
+
+Decay rate per band (box modes, all components pooled), 3 → 10 µm; free space predicts rate = k:
+
+| Band k (rad/µm) | 0.027 | 0.048 | 0.075 | 0.109 | 0.155 | 0.216 | 0.303 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Original export | 0.103 | 0.110 | 0.125 | 0.141 | 0.187 | 0.237 | 0.327 |
+| Re-solve, tolerance 1e-8 | 0.025 | 0.048 | 0.076 | 0.103 | 0.158 | 0.219 | 0.314 |
+
+| Check (Bx/By/Bz, relative L2) | Original | Re-solve |
+|---|---|---|
+| Re-solve vs original, same plane | — | 0.5 µm: 2.9 / 3.3 / 7.9%; 3 µm: 9.8 / 10.3 / 22.8%; 10 µm: 59.5 / 66.7 / 119.9% |
+| COMSOL 0.5 µm propagated to 10 µm (box walls, free space) vs COMSOL 10 µm | 56.7 / 52.0 / 41.4% | **3.8 / 4.5 / 3.1%** |
+| Same with k₀ = 0.10 | 9.7 / 11.9 / 9.1% | 37.9 / 35.7 / 34.2% |
+| Exact DXF coil (walls, free space) vs COMSOL, 3 µm | 14.0 / 13.0 / 25.1% | **9.5 / 8.7 / 8.5%** |
+| Same, 10 µm | 64.5 / 57.7 / 128.9% | **3.2 / 3.2 / 9.3%** |
+
+Read: the original export carried a solver error that is smooth in space and large where the field is weak; a
+residual-based convergence test judged it converged. With the tight tolerance COMSOL agrees with exact free-space
+magnetostatics, and with our simulator, to a few per cent at 10 µm. Ritaban's point that "the curl of the field is
+zero as there is no source there" is true of the physics; section 7 measured that the *original export* did not
+satisfy it, and the re-solve now does (it obeys the free-space decay law, which is equivalent in source-free air).
+
+**Consequences for earlier results.** Every COMSOL score in this project used the original exports. At 3 → 0.5 µm
+the inputs were off by 10–23% and the targets by 3–8%; all methods saw the same data, so rankings at 3 µm are
+unlikely to flip, but absolute numbers will move. At 10 µm the COMSOL test (phase 9) was not a valid test of
+physics; it becomes one once the coils are re-exported. What is needed from COMSOL: every configuration (L1_C1 all
+heights, data3, the IC model) re-exported with the tight tolerance.
+
+### 10. Did the re-solve fix the Ampère violation? Yes (17 November)
+
+`ampere_single_plane.py`, figure `final_evaluation/04_figures/p8_comsol_check/ampere_single_plane.png`.
+
+Section 7 tested Ampère's law with planes 1 µm apart. The re-solve only has 0.5, 3 and 10 µm, so that test cannot be
+repeated. An exact single-plane form exists: because B = ∇ × A, div B = 0 always, so each Fourier mode
+B ∝ exp(i k·r − γz) has B_z = i(k·B_t)/γ. Curl B = 0 then holds **if and only if γ = k**. So in source-free air
+
+    R(k) = B_z / [ i (k·B_t) / k ]   (box modes, × tanh(k(H − z)) for the top wall)
+
+must be 1 in every band. A screened field (γ = √(k² + k₀²)) gives k/√(k² + k₀²).
+
+| Band k (rad/µm) | 0.027 | 0.048 | 0.075 | 0.109 | 0.155 | 0.216 | 0.303 | 0.432 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Original export, 3 µm | 0.32 | 0.42 | 0.60 | 0.72 | 0.85 | 0.92 | 0.97 | 0.99 |
+| Original export, 10 µm | 0.35 | 0.42 | 0.60 | 0.72 | 0.84 | 0.90 | 0.94 | 1.00 |
+| Screened law, k₀ = 0.10 | 0.27 | 0.44 | 0.60 | 0.74 | 0.84 | 0.91 | 0.95 | 0.97 |
+| Re-solve, 3 µm | 1.01 | 0.98 | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 |
+| Re-solve, 10 µm | 1.00 | 0.99 | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 |
+
+The original export obeys the screened law within a few hundredths in every band: its "air current" (section 7) is
+exactly what a k₀ = 0.10 screening term produces. The re-solve satisfies Ampère's law to 1–2% in the lowest bands and
+to better than 0.5% above. **Answer to the open question of section 7:** the air current was numerical; with a tight
+solver tolerance it disappears. Ritaban's remark that "the curl of the field is zero as there is no source there" is
+true of the physics and of the re-solve; it was not true of the original export.
+
+What remains unexplained: why COMSOL's default convergence test accepted the loose solution (it reported a linear
+error of 8e-6). The likely reason is that a smooth, low-frequency error in the weak far field barely changes the
+residual it checks. That is a statement about COMSOL's settings, not about this project.
+
 ## How our simulator differs from the COMSOL model
 
 Ranked by how much each matters at high standoff.
@@ -219,6 +310,9 @@ python3 scripts/comsol_check/k0_test.py <dir>           # propagation with k0
 python3 scripts/comsol_check/dxf_forward.py <dir> COMSOL_params/Gemetry_C1.dxf   # simulate from the DXF
 python3 scripts/comsol_check/heldout_c1234.py <dir>     # held-out check on C1+C2+C3+C4
 python3 scripts/comsol_check/ic_rate.py                 # on the server: IC_4um decay and walls
+python3 scripts/comsol_check/tolerance_check.py <dir> <rt8.npz>   # tight-tolerance re-solve vs original (section 9)
+python3 scripts/comsol_check/plot_tolerance.py <dir> <rt8.npz> <out.png>
+python3 scripts/comsol_check/ampere_single_plane.py <dir> <rt8.npz> <out.png>   # single-plane Ampère test (section 10)
 ```
 
 The input arrays were made from `data/L1_C1_Z*.csv` and `data/data3/Coil_C1_C2_C3_C4/*Z{0p5,3p0,10p0,12p5}*.csv` on

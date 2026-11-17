@@ -1,5 +1,16 @@
 # Project context for a new coding chat
 
+## Real QDM data and the COMSOL re-solve (17 November 2026)
+
+- **COMSOL k0 cause confirmed:** a re-solve at solver tolerance 1e-8 (`COMSOL_params_v2/`) removes the extra decay;
+  free space now matches COMSOL to 3–5% at 10 µm and our exact-coil simulator to 3.2 / 3.2 / 9.3%. Original exports
+  were off by 60–120% at 10 µm, 10–23% at 3 µm. Ampère's law holds in the re-solve (single-plane test, ratio 1.00 in
+  every band; the original export followed the screened law). `README_COMSOL_MODEL.md` §9–10.
+- **Real QDM data** (`Experimental data/`, six B_NV maps, 1 µm pixels, NV axis/standoff/currents not given):
+  `final_evaluation/02_source_docs/p10_experimental/README_EXPERIMENTAL.md`, code `scripts/experimental/`, server
+  `runs/experimental_qdm/`. MAGIC-UNet run 10b recovers the coil layout in all six; on the near field vs the fitted
+  design, Tikhonov (3–4 µm) and FISTA (9 µm) beat every learned method.
+
 ## COMSOL model files analysed (14 November 2026)
 
 See [README_COMSOL_MODEL.md](README_COMSOL_MODEL.md); scripts in `scripts/comsol_check/`; inputs in `COMSOL_params/`.

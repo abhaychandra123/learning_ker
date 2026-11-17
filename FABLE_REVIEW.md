@@ -17,6 +17,13 @@ How to read the evidence tags:
 
 ---
 
+## Update, 17 November 2026
+
+The "unexplained physics anomaly" (finding of §2.2(b), risk 1) is explained: COMSOL's default solver tolerance. A
+re-solve of L1_C1 at tolerance 1e-8 obeys free-space decay and Ampère's law (`README_COMSOL_MODEL.md` §9–10). The
+real-QDM milestone (M8) has a first analysis on six measured maps
+(`final_evaluation/02_source_docs/p10_experimental/README_EXPERIMENTAL.md`); no calibrated standoff yet.
+
 ## Update after M1 and M2 (10 November 2026)
 
 Milestones M1 and M2 (§4.2) were run on the server under a protocol written and hashed before any new COMSOL score.

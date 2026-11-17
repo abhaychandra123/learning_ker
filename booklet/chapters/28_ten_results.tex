@@ -22,8 +22,8 @@ Simulation, 10\um\ to 0.5\um & Error & Layouts \\
 MAGIC-UNet (scale-adapted) & \textbf{15.8\%} & 50 \\
 MAGIC-UNet, on the 20 layouts below & \textbf{14.7\%} & 20 \\
 FISTA, 3{,}000 iterations (re-tuned) & 48.8\% & 20 \\
+FISTA-Net, with its 3\um\ settings & 91.4\% & 20 \\
 CSC-LISTA, with its 3\um\ settings & 91.8\% & 20 \\
-FISTA-Net, with its 3\um\ settings & still training & \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -160,14 +160,15 @@ COMSOL, 10\um\ to 0.5\um & 15 pairs & C1 family & \code{IC_4um} \\
 \midrule
 FISTA, 3{,}000 iterations & \textbf{54.3\%} & \textbf{50.2\%} & 71.0\% \\
 MAGIC-UNet & 59.3\% & 59.6\% & \textbf{58.3\%} \\
+FISTA-Net, with its 3\um\ settings & 91.1\% & 90.5\% & 93.5\% \\
 CSC-LISTA, with its 3\um\ settings & 98.1\% & 99.6\% & 92.4\% \\
-FISTA-Net, with its 3\um\ settings & \multicolumn{3}{c}{still training} \\
 \bottomrule
 \end{tabular}
 \end{center}
 
-On COMSOL the order flips. FISTA is ahead on the mean and on the C1-family coils. MAGIC-UNet is ahead on
-\code{IC_4um}.
+On the original COMSOL exports the order flips. FISTA is ahead on the mean and on the C1-family coils. MAGIC-UNet is
+ahead on \code{IC_4um}. Hold on to that thought: Section~\ref{sec:resolved} shows these exports were not solved
+correctly, and on the one coil that was re-solved the order flips back.
 
 \begin{figure}[H]
 \centering
@@ -268,6 +269,87 @@ At $k_0=0.15$ all three numbers land close to their COMSOL values, and 0.15 is i
 out COMSOL's walls, its mesh noise and the coil shapes themselves.
 \end{careful}
 
+\section{On the re-solved COMSOL coil}\label{sec:resolved}
+
+Everything above on COMSOL used the original exports. Chapter~\ref{ch:comsol} shows that their 10\um\ input is 39--58\%
+off a correctly solved field. On 17 November \code{L1_C1} was re-solved, so the methods were scored again on it, under
+rules written first (amendment A7). Every model first reproduced its saved scores on the original data exactly.
+
+\begin{center}
+\small
+\begin{tabular}{lcc}
+\toprule
+\code{L1_C1}, mean of $B_x$, $B_y$, $B_z$ & Original export & Re-solved \\
+\midrule
+\multicolumn{3}{l}{\textbf{10\um\ to 0.5\um}\quad (not like-for-like: only MAGIC-UNet was scale-adapted)} \\
+MAGIC-UNet (run B + data consistency) & 60.4\% & \textbf{26.2\%} \\
+\quad its height read-out (true 10\um) & 8.25\um & 9.72\um \\
+MAGIC-UNet run A, 12.8\um\ tile & 67.1\% & 35.0\% \\
+FISTA, 3{,}000 iterations & 49.8\% & 47.2\% \\
+FISTA-Net, 3\um\ settings & 90.6\% & 90.6\%$^\dagger$ \\
+CSC-LISTA, 3\um\ settings & 99.6\% & 98.0\% \\
+Tikhonov, 3\um\ settings & 98.7\% & 98.1\% \\
+\multicolumn{3}{l}{\textbf{3\um\ to 0.5\um}} \\
+MAGIC-UNet (run 2 + data consistency) & 23.9\% & \textbf{22.0\%} \\
+FISTA, 925 iterations & 26.7\% & 25.8\% \\
+FISTA-Net & 33.1\% & 32.6\%$^\dagger$ \\
+CSC-LISTA & 34.6\% & 34.1\% \\
+Tikhonov & 49.3\% & 48.8\% \\
+\bottomrule
+\end{tabular}
+
+\footnotesize $^\dagger$ reproduction gate failed by 0.03--0.04 of a point (see below).
+\end{center}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{hs_resolved_methods_L1_C1}
+\caption{Every method on \code{L1_C1}. Maps: the re-solved field, one colour scale per row, one MAGIC-UNet column.
+Bars: original export (light) against re-solve (dark). At 10\um\ only MAGIC-UNet was adapted to the scale.}
+\label{fig:resolvedmethods}
+\end{figure}
+
+Read the 10\um\ rows slowly, because the story changes here.
+
+\begin{itemize}
+\item \textbf{The order reverses.} On the original export FISTA led by 11 points. On the re-solve MAGIC-UNet leads by
+21 (26.2\% against 47.2\%), ten times the 2-point line that amendment A7 drew in advance.
+\item \textbf{FISTA hardly moves} (2.6 points); MAGIC-UNet moves 34. FISTA now sits near its simulated score (47.2\%
+against 48.8\%); MAGIC-UNet is still about 10 points above its own (26.2\% against 15.8\%). Why FISTA hardly moves was not tested, so do not explain it
+in the defence beyond what the numbers show.
+\item MAGIC-UNet's height read-out moves to within 0.3\um\ of the truth.
+\item FISTA-Net, CSC-LISTA and Tikhonov, with their 3\um\ settings, stay at 90--98\%, about the input's own error
+(97.8\% on $B_z$). They hand back roughly what they were given.
+\item At 3\um\ MAGIC-UNet leads FISTA-925 by 3.8 points on this coil. That clears the 2-point rule, but the 3\um\
+comparison of record is still the 15-pair one of Chapter~\ref{ch:fista_depth}.
+\end{itemize}
+
+Every model was first rerun on the original \code{L1_C1} and compared with its saved score. All passed, MAGIC-UNet to
+$10^{-16}$, except FISTA-Net: it was off by $2.9\times10^{-4}$ at 10\um\ and $4.3\times10^{-4}$ at 3\um, against a
+tolerance of $10^{-4}$. A separate scoring run found the same offset, so the rerun is repeatable and the difference sits
+in the value saved during training. It is 0.03 of a point, far below anything that changes a reading, but the rule was
+written first, so the rows carry the flag instead of the rule being loosened afterwards.
+
+\begin{careful}
+One wire shape, three component images, one seed per model. The other COMSOL configurations have not been re-solved,
+so every 15-pair mean in this chapter is still on the original exports. Say ``on the one re-solved coil the order
+reverses'', never ``MAGIC-UNet beats FISTA on COMSOL''.
+\end{careful}
+
+Figure~\ref{fig:resolvedrecon} shows what MAGIC-UNet's drop looks like. The network, the tile and the data-consistency step are
+the same in both rows; only the input changed. On the original export the coil comes out at less than half its
+strength, because the input had lost its broad structure before the network saw it. On the re-solved input the
+amplitude is right and only the sharp edges, which the 10\um\ field does not carry, are missing.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{figures/hs_resolved_reconstruction_L1_C1.png}
+\caption{MAGIC-UNet (run B + data consistency), 10\um\ to 0.5\um, on \code{L1_C1}. Top row: the original COMSOL
+export. Middle row: the re-solve at tolerance $10^{-8}$. One colour scale in every map. Bottom: a line cut through the
+coil, both outputs against the re-solved target. One wire shape, one seed.}
+\label{fig:resolvedrecon}
+\end{figure}
+
 \section{CSC-LISTA does not survive the move to 10\um}
 
 You asked for the other learned methods at 10\um\ too. They had only ever been trained for 3\um. So they were trained
@@ -304,8 +386,9 @@ same dictionary needs about 3{,}000 here.
 
 \begin{careful}
 This is a statement about CSC-LISTA \emph{as configured for 3\um}, with only the standoff changed, as you asked. Wider
-filters or more layers were not tried, and the run already used 40 of the GPU's 49\,GB. FISTA-Net has only 7 layers; it
-is still training and may fail in the same way. Section~\ref{sec:fair} puts both in context.
+filters or more layers were not tried, and the run already used 40 of the GPU's 49\,GB. FISTA-Net has only 7 layers, and
+it did fail in the same way: its best checkpoint (step 500 of 9{,}000) has a validation error of 129\%, worse than
+the input, and it scores 91.4\% on simulation and 91.1\% on COMSOL. Section~\ref{sec:fair} puts both in context.
 \end{careful}
 
 \section{Is this comparison fair? Not quite}\label{sec:fair}
@@ -348,7 +431,7 @@ Simulation, 10\um\ to 0.5\um, first 20 layouts & Adapted to 10\um? & Error \\
 FISTA, 3{,}000 iterations & re-tuned; no learned part & 48.8\% \\
 MAGIC-UNet run A, 12.8\um\ view & no & 52.7\% \\
 CSC-LISTA, 3\um\ settings & no & 91.8\% \\
-FISTA-Net, 3\um\ settings & no & still training \\
+FISTA-Net, 3\um\ settings & no & 91.4\% \\
 \midrule
 \emph{MAGIC-UNet run B, 44.8\um\ view} & \emph{yes: pixel size} & \emph{14.7\%} \\
 \bottomrule
@@ -379,7 +462,11 @@ MAGIC-UNet's architecture beats CSC-LISTA's or FISTA-Net's at 10\um.
 \begin{keyidea}[The fair summary at 10\um]
 On free-space simulated data, MAGIC-UNet with a tile matched to the blur reconstructs the 0.5\um\ field from 10\um\ with
 15.8\% error, three times better than a converged FISTA, without being told the standoff, and one model covers
-6--14\um. On COMSOL at 10\um\ it does \textbf{not} beat FISTA. Part of that is COMSOL's own physics; the rest is open.
+6--14\um. On the original COMSOL exports at 10\um\ it does \textbf{not} beat FISTA (59.3\% against 54.3\%). Since 17 November we
+know why those exports were off: COMSOL's default solver tolerance left their 10\um\ inputs 39--58\% away from a
+correctly solved field (Chapter~\ref{ch:comsol}). On the one coil re-solved at tolerance $10^{-8}$ the order
+reverses: MAGIC-UNet 26.2\%, FISTA 47.2\%. That is one wire shape and one seed, so it is a strong hint, not a
+general result.
 The other learned methods were not adapted to the 10\um\ scale, so their 10\um\ results do not rank architectures.
 \end{keyidea}
 
@@ -411,9 +498,10 @@ once. Each has one seed.
 \section{What is not yet known}
 
 \begin{itemize}
-\item FISTA-Net at 10\um: training, about 27 hours.
-\item The 18 points of MAGIC-UNet's COMSOL gap that the extra decay does not explain.
-\item Whether the result holds for other wire shapes, other currents, or a second seed.
-\item Whether a re-solved COMSOL model, without the extra decay, would put MAGIC-UNet ahead.
-\item Everything on experimental QDM data. Nothing here has been measured.
+\item Why MAGIC-UNet is still about 10 points above its simulated score on the re-solved coil (26.2\% against 15.8\%).
+\item Why FISTA hardly moves between the original export and the re-solve.
+\item Whether the reversal on the re-solved coil holds for other wire shapes, other currents, or a second seed. Only
+\code{L1_C1} has been re-solved.
+\item How a scale-matched CSC-LISTA or FISTA-Net would do (Section~\ref{sec:fair}).
+\item Real QDM data are in Chapter~\ref{ch:real}; there is no ground truth there.
 \end{itemize}

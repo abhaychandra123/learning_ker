@@ -59,7 +59,7 @@ Our simulator has no walls. It pads with zeros, as if space went on forever. Is 
 COMSOL's own 0.5\um\ field up to 10\um\ with an exact model of the box (mirror images in every wall) misses COMSOL's
 10\um\ field by 50.1\%. Without walls it misses by 50.8\%. The walls change almost nothing.
 
-\section{Measuring how fast the field really decays}
+\section{Measuring how fast the field really decays}\label{sec:cm_decay}
 
 So measure the decay directly. Physics says: between two heights $\Delta z$ apart, a ripple of frequency $k$ shrinks by
 $e^{-k\,\Delta z}$. Take two COMSOL planes, look at one band of frequencies in both, and ask by what factor it shrank.
@@ -271,13 +271,191 @@ Add $k_0$ to the simulator and the solvers & COMSOL scores at 5--12\um\ become m
 numerical artefact that a real QDM does not have \\
 \textbf{Keep free space} (chosen, 14 November) & Train and test on physically correct data, and report COMSOL above about
 4\um\ as a second check with this chapter as the warning \\
-Ask for a corrected re-solve & The clean fix, but it depends on someone else's time \\
+Ask for a corrected re-solve & The clean fix; done for L1\_C1 on 14--16 November, and it removed $k_0$ (next section) \\
 \bottomrule
 \end{tabularx}
 \end{center}
 
+\section{Confirmed: the solver tolerance (17 November)}
+
+We asked for one re-solve with a tighter solver. The direct solver could not be used: on this model it stops with
+``relative error $1.1\times10^{4}$, returned solution is not converged'', which is what a singular system does (the
+vector-potential formulation has no gauge fixing). So Ritaban re-ran the iterative solver with its relative tolerance
+tightened to $10^{-8}$, same model, same mesh, and exported L1\_C1 at 0.5, 3 and 10\um.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\textwidth]{cm_tolerance_resolve}
+\caption{Left: decay rate per frequency band between 3 and 10\um. The original export (red) follows the screened law
+$\sqrt{k^2+0.10^2}$; the re-solve (blue) follows free space, rate $=k$. Right: COMSOL's own 0.5\um\ field
+propagated to 10\um\ in free space, against COMSOL's 10\um\ plane.}
+\end{figure}
+
+\begin{center}
+\small
+\begin{tabular}{lcc}
+\toprule
+Check (Bx / By / Bz) & Original export & Re-solve, tolerance $10^{-8}$ \\
+\midrule
+0.5\um\ propagated to 10\um, against COMSOL 10\um & 57 / 52 / 41\% & \textbf{3.8 / 4.5 / 3.1\%} \\
+Our exact-coil simulator (free space) at 10\um & 65 / 58 / 129\% & \textbf{3.2 / 3.2 / 9.3\%} \\
+Our exact-coil simulator (free space) at 3\um & 14 / 13 / 25\% & 9.5 / 8.7 / 8.5\% \\
+Extra decay $k_0$ & $\approx 0.10$ rad/\um & none \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{keyidea}[What the re-solve settles]
+The extra decay was the default solver tolerance. With a tight tolerance COMSOL obeys free-space magnetostatics, and our
+simulator matches it to a few per cent at 10\um. The original exports were off by 39--58\% of the correct field at 10\um\ (60--120\% if the
+difference is divided by the original export instead, which is weaker), 9--20\% at 3\um\ and 3--8\% at 0.5\um. Only L1\_C1 at three heights has been re-solved so far; every other COMSOL file still
+needs a re-export before it can serve as a clean test.
+\end{keyidea}
+
+\section{And Amp\`ere's law? Answered on a single plane}
+
+The re-solve has only three planes (0.5, 3, 10\um), so the test with planes 1\um\ apart cannot be repeated. It does
+not need to be. Because $\mathbf{B} = \nabla\times\mathbf{A}$, $\nabla\cdot\mathbf{B}=0$ always, and each Fourier
+mode $\mathbf{B}\propto e^{i\mathbf{k}\cdot\mathbf{r}-\gamma z}$ obeys
+\begin{equation}
+B_z = \frac{i\,\mathbf{k}\cdot\mathbf{B}_t}{\gamma}.
+\end{equation}
+Amp\`ere's law, $\nabla\times\mathbf{B}=0$, holds if and only if $\gamma = k$. So on one plane the ratio
+$R(k) = B_z/[\,i\,\mathbf{k}\cdot\mathbf{B}_t/k\,]$ must be 1 in every band. A screened field gives
+$k/\sqrt{k^2+k_0^2}$.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\textwidth]{cm_ampere_single_plane}
+\caption{The single-plane Amp\`ere test. The original export (red) follows the screened law with $k_0=0.10$; the
+re-solve (blue) gives 1.00 in every band at 3 and at 10\um.}
+\end{figure}
+
+\begin{keyidea}[The answer]
+The original export had current flowing in empty air because of a loose solver tolerance. With the tolerance at
+$10^{-8}$ the field satisfies Amp\`ere's law to 1--2\% in the lowest bands and better than 0.5\% above. The air current
+was numerical, and it is gone.
+\end{keyidea}
+
+\section{Seeing it: three versions of the same coil}
+
+Numbers like ``58\% off'' are easy to read past. So here is the same coil, \code{L1_C1}, three ways:
+\begin{itemize}
+\item \textbf{Original export}: what we used for every COMSOL score until 17 November, solved with COMSOL's default
+tolerance.
+\item \textbf{Re-solve}: the same model and mesh, solved with the tolerance tightened to $10^{-8}$.
+\item \textbf{Our simulator}: the physics of our training data (Chapter~\ref{ch:simulation}): a thin current sheet at
+$z=0$, the thin-sheet Biot--Savart formulas, and decay $e^{-kz}$. The current is the exact coil from the drawing
+(\code{Gemetry_C1.dxf}), 600\,\textmu A, spread over each 2\um\ wire by a conduction solve. Nothing is fitted: no scale, no
+height, no offset. Only the direction of the current is read from the data.
+\end{itemize}
+
+\begin{sidewaysfigure}
+\centering
+\includegraphics[width=\textheight]{cm_resolve_vs_old_maps}
+\caption{$B_z$ of the three versions at 0.5, 3 and 10\um, and the differences from the re-solve. Each row has one colour
+scale, so a lighter panel really is a weaker field.}
+\label{fig:cm_three_maps}
+\end{sidewaysfigure}
+
+Read Figure~\ref{fig:cm_three_maps} row by row.
+\begin{itemize}
+\item \textbf{At 0.5\um} all three show the same spiral. The original and the re-solve differ by 3--8\%. Our simulator
+differs from the re-solve by 17--20\%, but look at its difference panel: the error is a fine speckle along every wire
+edge. That is COMSOL's mesh noise, which Chapter~\ref{ch:limits} measured at 14--18\% of the 0.5\um\ target. A clean
+simulator cannot reproduce it, and should not.
+\item \textbf{At 3\um} the original is already a little weak inside the coil (20\% off in $B_z$); our simulator is 9\%
+off, again mostly speckle.
+\item \textbf{At 10\um} the original has lost almost half its strength: its difference panel is one large smooth blob.
+Our simulator's difference panel is nearly blank: 3 / 3 / 9\% off.
+\end{itemize}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{cm_resolve_vs_old_linecut}
+\caption{A cut through the coil at 3\um\ (left) and 10\um\ (right), all three components. Blue: re-solve. Green
+dashed: our simulator. Red: original export.}
+\label{fig:cm_three_cuts}
+\end{figure}
+
+The line cuts make the point with no colour scale to argue about. At 3\um\ the three curves almost sit on each other.
+At 10\um\ the green dashed line of our simulator lies on the blue re-solve, and the red original sits well inside both:
+too weak, in every component.
+
+\subsection*{Why an early-stopped solve damages exactly this}
+
+COMSOL turns the physics into one enormous linear system, $A\mathbf{u}=\mathbf{f}$, with millions of unknowns. It does
+not solve it in one go. An iterative solver starts from a guess and improves it step by step, and it stops once the
+leftover mismatch is a small enough fraction of $\mathbf{f}$. That fraction is the tolerance.
+
+Two facts then explain everything you see above.
+\begin{enumerate}
+\item \textbf{The error left behind is smooth.} Iterative solvers remove sharp, local errors quickly; broad, smooth
+errors are the last to go. So when the solver stops early, what is left is a smooth error. In the field, smooth means
+broad structure: low spatial frequencies $k$.
+\item \textbf{Higher up, the field \emph{is} broad structure.} Fine detail decays as $e^{-kz}$, so the higher you go, the
+more of what is left is broad. The right panel of Figure~\ref{fig:cm_three_why} measures it: the share of the field's
+energy below $k=0.1$\,rad/\um\ is 2\% at 0.5\um, 11\% at 3\um\ and 68\% at 10\um.
+\end{enumerate}
+A smooth error is invisible near the coil, where almost nothing is broad, and dominant at 10\um, where almost everything
+is.
+
+\begin{sidewaysfigure}
+\centering
+\includegraphics[width=\textheight]{cm_resolve_vs_old_why}
+\caption{Left: amplitude of each version relative to the re-solve, per spatial frequency. Middle: how fast each
+frequency fades between 3 and 10\um; free-space physics says the rate equals $k$. Right: how much of the field is broad
+structure at each height.}
+\label{fig:cm_three_why}
+\end{sidewaysfigure}
+
+\begin{itemize}
+\item \textbf{Left:} the original export (red) keeps more than 90\% of the fine detail but only about 30\% of the broadest
+structure at 10\um, and about 50\% at 3\um. Our simulator (green) stays at 1.0 at every scale; only the broadest band is
+about 8\% high, where the coil's leads and the box walls matter most.
+\item \textbf{Middle:} the original fades on the screened curve $\sqrt{k^2+0.10^2}$ of Section~\ref{sec:cm_decay}. The
+re-solve and our simulator both fade at exactly $k$, as physics requires, and lie on top of each other.
+\end{itemize}
+
+\begin{center}
+\small
+\begin{tabular}{lccc}
+\toprule
+Off the re-solve ($B_x$ / $B_y$ / $B_z$) & 0.5\um & 3\um & 10\um \\
+\midrule
+Original export & 3 / 3 / 8\% & 10 / 9 / 20\% & 42 / 39 / 58\% \\
+Our simulator, exact coil & 19 / 17 / 20\% & 9 / 9 / 9\% & \textbf{3 / 3 / 9\%} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{keyidea}[Where our simulator lies]
+Next to the correctly solved field. Higher up, where COMSOL's mesh noise has decayed away, our simulator matches it to a
+few per cent with nothing fitted. Near the coil the remaining difference is mostly mesh noise in COMSOL. The physics
+used for every training set in this project was right; it was the old COMSOL export that was off.
+\end{keyidea}
+
+\begin{careful}[One modelling detail]
+The figures close the coil's leads through the box walls, as COMSOL does. Our training layouts instead close every
+loop with a rail outside the image. With plain zero padding and the leads simply ending at the image edge, the
+simulator is 7 / 15 / 25\% off the re-solve at 10\um: the missing return current adds a field near the edge. That is a
+statement about how this coil's leads are modelled, not about the physics.
+\end{careful}
+
+\textbf{What it changed for the results.} Every COMSOL score at 10\um\ in Chapter~\ref{ch:ten_results} used the original
+export as input. On the re-solved \code{L1_C1}, MAGIC-UNet's 10\um\ error falls from 60.4\% to 26.2\%
+(Section~\ref{sec:resolved}).
+
+\begin{defend}[If your professor asks: why trust the re-solve and not the original?]
+Because three independent checks agree with it and not with the original: it fades at exactly the free-space rate, it
+satisfies Amp\`ere's law in empty air on a single plane, and it matches our simulator of the exact coil to 3--9\% at
+10\um\ with nothing fitted. The original fails all three, and the only thing changed between them is the solver
+tolerance.
+\end{defend}
+
 \begin{defend}[If your professor asks: how can you say COMSOL is wrong?]
-Not wrong everywhere: near the coil it is fine, and at 3\um\ the effect is a few per cent in the measured band. But
+COMSOL is not wrong; its default solver setting was too loose for the weak far field, and the re-solve with a tight
+tolerance agrees with free-space physics to a few per cent. Before the re-solve: not wrong everywhere: near the coil it is fine, and at 3\um\ the effect is a few per cent in the measured band. But
 above about 4\um\ its field in the air violates Amp\`ere's law by 27--52\%, where exact physics gives 1\% in the same
 test. Empty air cannot carry current. Our simulator matches an independent Biot--Savart calculation to under 1\%, and
 matches COMSOL to 10--12\% at every height once this one term is added.

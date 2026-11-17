@@ -229,7 +229,9 @@ Rules fixed before launch: [HIGH_STANDOFF_PROTOCOL.md](HIGH_STANDOFF_PROTOCOL.md
 [final_evaluation/02_source_docs/p9_high_standoff/README_HIGH_STANDOFF.md](final_evaluation/02_source_docs/p9_high_standoff/README_HIGH_STANDOFF.md).
 In short, at 10 → 0.5 µm: on simulation MAGIC-UNet (run B, 44.8 µm tile, with the data-consistency step) 15.8%,
 FISTA 48.8%, CSC-LISTA with its 3 µm settings 91.8%, and run A (12.8 µm tile) 58.2%; on COMSOL FISTA 54.3%,
-MAGIC-UNet 59.3%, CSC-LISTA 98.1%. FISTA-Net at 10 µm was still training on 16 November. Not like-for-like: only
+MAGIC-UNet 59.3%, CSC-LISTA 98.1% (original exports); FISTA-Net with its 3 µm settings 91.4% on simulation, 91.1% on
+COMSOL. On the one COMSOL coil re-solved at tolerance 1e-8 (L1_C1, 17 November) the order reverses: MAGIC-UNet 26.2%,
+FISTA 47.2% (one shape, one seed). Not like-for-like: only
 MAGIC-UNet was adapted to the 10 µm scale (0.7 µm pixels); CSC-LISTA and FISTA-Net kept their 3 µm settings, so their
 10 µm scores show that those configurations do not transfer, not that the architectures cannot work (README_HIGH_STANDOFF.md §7.3).
 
@@ -270,3 +272,21 @@ Scoring scripts for 10 µm (prepared 14 November; rules in amendment A1 of the p
   was the right baseline depth there (amendment A3).
 - `hpc/run_high_standoff_scoring.sh` queues them: padding test, wait for both runs, rescoring, FISTA. Outputs go to
   `runs/high_standoff/{fista_pad_test,m1,fista}`.
+
+## Real QDM data (17 November 2026)
+
+Full write-up: `final_evaluation/02_source_docs/p10_experimental/README_EXPERIMENTAL.md`. Six measured B_NV maps of the
+four-coil chip (1 µm pixels), converted to Bx, By, Bz with an NV axis fitted from the designed coil; runs 2, 3 and
+10b with the correction at their own height read-out, nothing chosen on these data.
+
+- **Run 10b (0.7 µm pixels, 44.8 µm tile) recovers a clean spiral current in all six cases**, including two coils at
+  once and coils at 9–12 µm; current correlation with the fitted design 0.63 / 0.60 / 0.48 / 0.39 / 0.50 (cases 1–5).
+- **Runs 2 and 3 (0.2 µm pixels) turn the measurement noise into spurious currents**: the noise is correlated over the
+  1 µm camera pixels, which at 0.2 µm looks like wire-scale structure. Their height read-out is far too low (1.2–2.0 µm
+  at a fitted 3–4 µm).
+- **Height read-out stays inside each run's training range**: run 10b reads 3.7–4.9 µm at fitted 3.0–4.3 µm, and
+  7–8 µm at fitted 8.6–11.7 µm.
+- On the 0.5 µm field against the fitted design, the corrected network is not better than Tikhonov (case 1 in band:
+  70% against 60%).
+- Control: on the clean field of the fitted coil, run 2 reads 3.19 µm (fit 3.37), 14% field error, current correlation
+  0.985; the pipeline is right and the gap is the data.

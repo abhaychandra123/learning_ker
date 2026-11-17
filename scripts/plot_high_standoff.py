@@ -29,7 +29,7 @@ MARKER = dict(run10b='o', run10a='s', run3='^', run2='D')
 # shown once their 10 um runs exist; they kept their 3 um settings, so every figure says so (not like-for-like)
 EXTRA = (('fista_net', 'FISTA-Net (3 µm settings)'), ('csc_lista', 'CSC-LISTA (3 µm settings)'))
 MAGIC_NOTE = ('MAGIC-UNet: run B (0.7 µm pixels)\nwith the data-consistency step.\n'
-              'Only MAGIC-UNet was adapted to 10 µm;\nCSC-LISTA kept its 3 µm settings.')
+              'Only MAGIC-UNet was adapted to 10 µm;\nFISTA-Net and CSC-LISTA kept\ntheir 3 µm settings.')
 plt.rcParams.update({
     'figure.facecolor': SURFACE, 'axes.facecolor': SURFACE, 'savefig.facecolor': SURFACE,
     'font.size': 10, 'axes.edgecolor': INK2, 'axes.labelcolor': INK, 'text.color': INK,
@@ -141,23 +141,24 @@ def standoff_curve(sim, fista_mean, path):
 
 def per_layout(sim, fista_rows, extra, path):
     """One dot per layout at 10 um: MAGIC-UNet, FISTA and any further method in `extra` {label: (key, values)}."""
-    fig, ax = plt.subplots(figsize=(7.6, 4.6), constrained_layout=True)
+    fig, ax = plt.subplots(figsize=(9.6, 4.8), constrained_layout=True)
     magic = [100 * mean3(r, 'dc_est') for r in sim if r['run'] == 'run10b' and float(r['standoff']) == 10.0]
     groups = [(f'MAGIC-UNet, scale-adapted\n({len(magic)} layouts)', COLOR['magic'], magic),
               (f'FISTA\n(first {len(fista_rows)} layouts)', COLOR['fista'],
                [100 * np.mean([float(r[c]) for c in COMPONENTS]) for r in fista_rows])]
-    groups += [(f'{label}\n(first {len(values)} layouts)', COLOR[key], [100 * v for v in values])
+    groups += [(label.replace(' (', '\n(') + f'\n(first {len(values)} layouts)', COLOR[key], [100 * v for v in values])
                for label, (key, values) in extra.items()]
     rng = np.random.default_rng(0)
     for i, (label, colour, values) in enumerate(groups):
         ax.scatter(i + rng.uniform(-0.17, 0.17, len(values)), values, s=30, color=colour, alpha=0.75,
                    edgecolor=SURFACE, linewidth=0.8)
         ax.hlines(np.mean(values), i - 0.3, i + 0.3, color=INK, lw=2)
-        ax.annotate(f'mean {np.mean(values):.1f}%', (i + 0.32, np.mean(values)), va='center', fontsize=9)
+        ax.annotate(f'mean {np.mean(values):.1f}%', (i, np.mean(values) + 2), ha='center', va='bottom', fontsize=9,
+                    fontweight='bold', bbox=dict(boxstyle='round,pad=0.15', fc=SURFACE, ec='none', alpha=0.85))
     ax.set_xticks(range(len(groups)))
     ax.set_xticklabels([g[0] for g in groups], fontsize=9)
-    ax.set_xlim(-0.5, len(groups) - 0.2)
-    ax.set_ylim(0, None)
+    ax.set_xlim(-0.5, len(groups) - 0.5)
+    ax.set_ylim(0, 106)
     ax.set_ylabel('Relative L2 error per layout (%)')
     ax.set_title('Simulation, 10 → 0.5 µm: one dot per layout\nNot like-for-like: only MAGIC-UNet was adapted to the 10 µm scale',
                  loc='left')

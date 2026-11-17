@@ -92,17 +92,29 @@ def main():
         d, m = f["data"], f["full_mask"]
         X, Y = np.meshgrid(f["X"], f["Y"])
         med = ndimage.generic_filter(np.where(m, d, np.nan), np.nanmedian, 5, mode="nearest")
+        signal = f["signal"]
+        if len(sys.argv) > 3:                                          # optional common NV axis "theta,phi" (deg)
+            th0, ph0 = (np.deg2rad(float(v)) for v in sys.argv[3].split(","))
+            o = (fit["orientation"]["rot90"], fit["orientation"]["mirror"])
+            win = m & fc.window(X, Y, *fit["centre_um"], o)
+            from scipy import optimize
+            resid = lambda q: (fc.evaluate([q[0], th0, ph0, q[1], q[2]], o, d, win, X, Y)[1] - d)[win]
+            r = optimize.least_squares(resid, [fit["standoff_um"], *fit["centre_um"]], diff_step=0.02, max_nfev=40,
+                                       bounds=([0.5, -50, -50], [30, 215, 215]))
+            coef, _, T, _ = fc.evaluate([r.x[0], th0, ph0, r.x[1], r.x[2]], o, d, win, X, Y)
+            signal = coef[0]*T
+            fit = dict(fit, nv_theta_deg=float(np.rad2deg(th0)), nv_phi_deg=float(np.rad2deg(ph0)),
+                       standoff_um=float(r.x[0]), centre_um=[float(r.x[1]), float(r.x[2])], current_uA=float(coef[0]*1e6))
+            print(case, "refit with the common axis: h", round(r.x[0], 2), "centre", np.round(r.x[1:], 1), "I", round(coef[0]*1e6), flush=True)
         # Background: refit on the FULL image with the fitted coil signal held fixed. (The window fit's own
         # background is only valid inside the window; extrapolating its plane across 165 um creates false fields.)
         cols = fc.background_cols(X, Y)
         A = np.stack([c[m] for c in cols], 1)
-        bgc, *_ = np.linalg.lstsq(A, (d - f["signal"])[m], rcond=None)
+        bgc, *_ = np.linalg.lstsq(A, (d - signal)[m], rcond=None)
         bg = sum(c*b for c, b in zip(bgc, cols))
         fit = dict(fit, background_full_uT=[float(v) for v in bgc])
         clean =np.where(m, d, np.where(np.isfinite(med), med, bg))   # fully masked patches -> background
         b = clean - bg
-        if len(sys.argv) > 3:                                          # optional common NV axis "theta,phi" (deg)
-            fit = dict(fit, nv_theta_deg=float(sys.argv[3].split(",")[0]), nv_phi_deg=float(sys.argv[3].split(",")[1]))
         th, ph = np.deg2rad(fit["nv_theta_deg"]), np.deg2rad(fit["nv_phi_deg"])
         u = fc.unit(th, ph)
         spectra, n = nv_to_vector(b, u)

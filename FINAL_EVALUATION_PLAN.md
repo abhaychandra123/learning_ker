@@ -6,6 +6,10 @@ are marked **[new]**.
 
 Eight days are left. The final report and the final deck have not been started.
 
+**Status 17 November:** the COMSOL anomaly is explained (solver tolerance, §5.3), the 10 µm phase is done, and the
+real QDM data have been analysed with every method (§5.4). The live checklist is `TODO.md` §0; the story is
+`final_evaluation/01_journey/JOURNEY.md`.
+
 ---
 
 ## 1. The problem in one paragraph
@@ -153,10 +157,18 @@ Full analysis: [README_COMSOL_MODEL.md](README_COMSOL_MODEL.md). In short:
   3–12.5 µm, including a held-out configuration; without it, 65 / 61 / 134% at 10 µm.
 - **The 90° rotation** is COMSOL's cut-plane frame (cpl1x = −Y, cpl1y = X; B columns global).
 
-Decision needed (the user's): (1) add k₀ to the simulator and operator, so COMSOL tests at 5–12.5 µm become meaningful
-but the model learns a dataset artefact; (2) keep free space and treat COMSOL above about 4 µm as invalid; or (3) ask
-Hari for a direct-solver re-solve (more mesh refinement will not help). Options (1) and (2) can run side by side as the
-two arms of the high-standoff experiment.
+Decision (14 November): keep free space. **Confirmed on 17 November** by Ritaban's re-solve of L1_C1 at solver
+tolerance 1e-8 (`COMSOL_params_v2/`; the direct solver fails, the system is singular): k₀ is gone, free space matches
+COMSOL to 3.8 / 4.5 / 3.1% from 0.5 to 10 µm, our exact-coil simulator matches it to 3.2 / 3.2 / 9.3% at 10 µm, and
+Ampère's law holds in the air (single-plane ratio 1.00 in every band; the original export followed the screened law).
+The extra decay and the air current were the default solver tolerance. Details: `README_COMSOL_MODEL.md` §9–10.
+
+### 5.4 Real QDM data (16–17 Nov)
+
+Six measured B_NV maps of the same chip (`Experimental data/`), analysed in
+`final_evaluation/02_source_docs/p10_experimental/README_EXPERIMENTAL.md`. No ground truth; the reference is the
+designed coil fitted to each map. MAGIC-UNet run 10b recovers the coil layout in all six (including two coils at once
+and 9–12 µm); on the near field, Tikhonov (3–4 µm) and FISTA (9 µm) are closer than every learned method.
 
 ---
 

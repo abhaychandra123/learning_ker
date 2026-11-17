@@ -1,0 +1,128 @@
+\chapter{Real QDM data}\label{ch:real}
+
+Everything so far was tested on simulation and on COMSOL. On 16 November Ritaban sent six maps measured on a real
+quantum diamond microscope, of the same four-coil chip that the COMSOL model describes. This chapter shows what it takes
+to use them, how every method did, and what can honestly be concluded. Nothing was trained and nothing was chosen on
+these data.
+
+\section{What a QDM actually measures}
+
+The maps are 165 $\times$ 165 pixels of 1\um. Each pixel is \emph{one} number: the field projected on the axis of
+the NV centres in the diamond,
+\begin{equation}
+B_{NV} = \mathbf{u}\cdot\mathbf{B} = u_x B_x + u_y B_y + u_z B_z ,
+\end{equation}
+where $\mathbf{u}$ is the NV axis. Every method in this booklet expects $B_x$, $B_y$, $B_z$. The NV axis, the standoff
+and the currents were not given.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\textwidth]{rd_experimental_maps}
+\caption{The six measured maps. Cases 1 and 4: bottom-left coil. Case 2: top-left coil (the mirror image, as in the chip
+design). Case 5: both left coils. Cases 3 and 6: a coil seen from much farther away.}
+\end{figure}
+
+\section{A close look at the maps}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\textwidth]{rd_data_characterisation}
+\caption{Top: local noise of case 1, the coil's signal spectrum against the noise floor, and how alike the cases are.
+Bottom: case 1, the fitted design, and what the design does not explain.}
+\end{figure}
+
+\begin{itemize}
+\item \textbf{Noise:} about 0.37\,\textmu T\ per pixel in every case, 3--8\% of the coil signal's range; the corners are
+several times noisier, and a few hundred pixels per map are fit failures of up to $\pm10^5$\,\textmu T.
+\item \textbf{Seam:} the left and right halves of each image differ by up to 1\,\textmu T\ at $x\approx86$\um.
+\item \textbf{What the data contain:} the coil's spectrum meets the noise at about 0.85\,rad/\um\ (a 7\um\ wavelength)
+for the near coils and 0.55\,rad/\um\ (11\um) for the deep ones. Finer detail is not in the data.
+\item \textbf{Same coil, different cases:} cases 1, 4 and 5 correlate 0.91--0.96 over the bottom-left coil; case 3 is
+the same shape from farther away.
+\item \textbf{Leads:} the real leads run left along $y\approx20$--25\um, not where the drawing puts them.
+\end{itemize}
+
+\section{One projection is enough, if you know the axis}
+
+Above the wires the field is source-free, so all three components come from one scalar potential, and in Fourier space
+$B_x = -i(k_x/k)B_z$ and $B_y = -i(k_y/k)B_z$. Substituting,
+\begin{equation}
+B_z(\mathbf{k}) = \frac{B_{NV}(\mathbf{k})}{u_z - i\,(u_x k_x + u_y k_y)/k}.
+\end{equation}
+The denominator never falls below $u_z$, so the step is stable. But it needs $\mathbf{u}$.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\textwidth]{rd_vector_from_bnv_case1}
+\caption{Case 1: $B_x$, $B_y$, $B_z$ rebuilt from the single projection (top) and the fitted design (bottom). This is
+the input every method receives.}
+\end{figure}
+
+\section{Fitting the design to find the axis}
+
+We placed the designed spiral (the COMSOL drawing) in each image and fitted its orientation, centre, standoff, the NV
+axis, the current and a background. The fit finds the chip layout by itself: the top-left coil comes out mirrored, as
+designed. Fitted standoffs: 3.4, 3.7, 4.3\um\ for the near coils and 9.2, 10.6\um\ for cases 3 and 6.
+
+\begin{careful}[Two limits of this fit]
+\begin{itemize}
+\item The axis is weakly fixed by any one map: changing it moves the share of the signal explained only from 49 to
+57\% (case 1). A joint scan over all maps at the standard angle $\theta = 54.7^\circ$ picks $\varphi = 157.5^\circ$.
+\item The real leads are routed differently from the drawing, so the fitted design explains only 43--56\% of the near
+maps. It is the reference we score against, and it is a \emph{model}, not ground truth.
+\end{itemize}
+\end{careful}
+
+\section{The results}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\textwidth]{rd_magic_currents_all_cases}
+\caption{MAGIC-UNet run 10b (0.7\um\ pixels, 44.8\um\ view) on all six maps. Bottom: predicted current. Green: the
+designed spiral at the fitted position.}
+\end{figure}
+
+\begin{center}
+\small
+\begin{tabular}{lccccc}
+\toprule
+0.5\um\ field vs fitted design, in band & MAGIC-UNet & FISTA & FISTA-Net & CSC-LISTA & Tikhonov \\
+\midrule
+Case 1 (3.4\um) & 70\% & 76\% & 78\% & 69\% & \textbf{60\%} \\
+Case 4 (4.3\um) & 80\% & 136\% & 111\% & 105\% & \textbf{73\%} \\
+Case 3 (9.2\um) & 78\% & \textbf{49\%} & 88\% & 100\% & -- \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{keyidea}[What the real data say]
+\begin{itemize}
+\item \textbf{The current layout comes through.} Run 10b draws the spiral in all six cases, including two coils at
+once and coils at 9--12\um, without being told the standoff or the number of coils.
+\item \textbf{The near-field advantage does not transfer.} Against the fitted design, Tikhonov is closest at
+3--4\um\ and FISTA at 9\um. No learned method beats them on real data yet.
+\item \textbf{The pixel must match the data.} Runs 2 and 3 (0.2\um\ pixels) turn the camera noise, which is smooth over
+1\um\ pixels, into false currents and read the height far too low. Run 10b's 0.7\um\ pixels do not.
+\item \textbf{The height comes from the prior.} Each network reads a height inside its own training range, as
+Chapter~\ref{ch:question} predicted.
+\end{itemize}
+\end{keyidea}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\textwidth]{rd_methods_case1}
+\caption{Case 1, $B_z$ at 0.5\um\ from every method, next to the fitted design.}
+\end{figure}
+
+\section{Is the pipeline right?}
+
+On the clean field of the fitted coil, the same pipeline reads the standoff as 3.19\um\ (fit 3.37), reconstructs the
+0.5\um\ field to 14\% and returns a current that correlates 0.985 with the coil. So the gap on real data is the data:
+correlated noise, an uncertain axis, a background and leads that the simulator never showed the network.
+
+\begin{defend}[If your professor asks: so does it work on real data?]
+It recovers where the current flows, from 3 to 12\um, without being told the standoff; that part works. It does not
+yet give a better near field than Tikhonov against our best reference, which is itself a fitted drawing. To measure
+accuracy properly we need the NV axis, the standoff and the currents from the experiment, and a calibration structure
+of known shape.
+\end{defend}

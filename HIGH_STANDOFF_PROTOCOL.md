@@ -212,3 +212,35 @@ to FISTA, FISTA-Net and CSC-LISTA, and the FISTA depth with the lowest error sho
   3,000 iterations; otherwise FISTA at 3,000 iterations stays the baseline. If the best λ at the new depth is the
   smallest of the three, that is reported as a grid end.
 - **Order on the GPU** (`hpc/run_high_standoff_methods.sh`): CSC-LISTA, the FISTA curve, FISTA-Net.
+
+### A7. Every method on the re-solved COMSOL L1_C1 (17 November 2026, about 07:00 server time)
+
+Written after the user approved this test and before any method was scored on the re-solved data. The only numbers
+seen on these data are comparisons of the fields themselves (re-solve against the original export, and against
+free-space propagation: `README_COMSOL_MODEL.md` §9 and `final_evaluation/04_figures/p8_comsol_check/resolve_vs_old_*.png`).
+
+- **Why.** On 17 November COMSOL's extra decay was traced to its default solver tolerance. A re-solve of L1_C1 at
+  relative tolerance 1e-8 (`COMSOL_params_v2/Extra_Fine_Mesh/FGMRES_RT1e-8/`, 0.5, 3 and 10 µm) obeys free-space
+  physics to 3–5% at 10 µm. Every COMSOL score so far used the original export, whose 10 µm input is 39–58% off the
+  re-solved field (relative to the re-solve; Bx / By / Bz) and whose 3 µm input 9–20% off.
+- **Data.** Two pairs, L1_C1 at 10 → 0.5 µm and 3 → 0.5 µm, from the re-solve only. Converted exactly as the existing
+  `runs/combined_full_200/comparison/*.npz` files (the CSV arrays in µT, no rotation; checked by rebuilding the
+  original files from the original CSVs to 4e-8). Server folder `runs/comsol_resolved/comparison/`.
+- **Methods and settings, all fixed already; nothing is chosen on these data.**
+  - 10 → 0.5 µm: MAGIC-UNet run B, raw and with the data-consistency step at its own h* (grid to 20 µm, its own μ(h)
+    curve); run A the same, for the tile-size comparison only; FISTA at 3,000 iterations (λ scale 0.0003, padding
+    128 px, operator exp(−k·9.5 µm)); CSC-LISTA at 10 µm (3 µm settings) and its Tikhonov (μ = 0.1, chosen on 10 µm
+    simulated crops); FISTA-Net at 10 µm (3 µm settings) once its training and scoring have finished.
+  - 3 → 0.5 µm: MAGIC-UNet run 2, raw and with the data-consistency step at h* (grid to 12 µm, its own μ(h) curve);
+    FISTA at 925 iterations (the baseline of A3) and at 1,000 (λ scale 0.03); FISTA-Net run 2; CSC-LISTA strict 64;
+    Tikhonov μ = 0.0316.
+- **Reproduction gate.** Each method is first re-run on the original L1_C1 arrays and must reproduce its saved L1_C1
+  scores to 1e-4 (FISTA, which is re-run from scratch, to 2e-4). A method that fails is reported as failed.
+- **Reported.** Relative L2 and NRMSE per component and their mean, on the re-solved pair, next to the same method on the
+  original pair; for MAGIC-UNet also h*. The figures use one colour scale per figure.
+- **Reading, fixed now.** This is one wire shape (three component images) and one seed per model, so a difference
+  between two methods under 2 points is reported as not distinguishable. The 10 µm comparison with CSC-LISTA and
+  FISTA-Net stays not like-for-like (only MAGIC-UNet was scale-adapted). The target changes by only 3–8% between the two
+  solves, so a change in a method's score comes mostly from its input.
+- **Order on the GPU.** MAGIC-UNet first (small); FISTA, CSC-LISTA, FISTA-Net and Tikhonov after FISTA-Net's training
+  has finished, so they do not compete with it for GPU memory.
