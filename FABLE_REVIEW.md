@@ -250,6 +250,8 @@ full images).
    `README_MAGIC_UNET.md` says the standoff was drawn per image from 50 ± 10 µm and never given to the network. The second
    is the basis of your whole port and decides how much novelty is left, so re-read the paper's Supplement D and correct
    whichever file is wrong. [not verified by me: a search summary described the training standoff as fixed]
+   **Resolved 18 November:** the published paper (Sec. III, Table V, Sec. V C) says 50 ± 10 µm per image, never given to
+   the network. `README_MAGIC_UNET.md` was right; `RESEARCH_BEYOND_ISTA.md` is corrected.
 4. **Mixed sample sizes in one table.** `15_floor.tex` puts two-configuration Wiener numbers above "FISTA-300 (15 pairs)
    30.5%", and the run 3 table in `README_MAGIC_UNET.md` compares a five-configuration mean (34.8%) with a
    two-configuration floor (34.5%). On the same two configurations FISTA-300 is 29.4%, not 30.5%.
@@ -538,7 +540,7 @@ Nothing exists yet. In order of cost:
 | Fourier against Bayesian reconstruction on QDM data | Midha, Parashar, Bathla, Broadway, Tetienne, Saha, arXiv 2402.17781 | [web]; your group | Regularised current reconstruction on QDM |
 | L1-curl prior, divergence-free wavelets, 1–10 µm | arXiv 2408.16550 | [web] title and abstract; standoff range from your notes | A training-free current prior; required baseline |
 | Dictionary + LASSO, 3D and time | Bathla et al., arXiv 2506.05491 | [web] title; your group | Sparse dictionary reconstruction |
-| U-Net, field → current | Reed et al. (MAGIC-UNet), arXiv 2407.14553; Phys. Rev. Applied 23, 034035 (2025) | [web]; journal reference from the DOI in search results | Learned current reconstruction; unknown standoff inside a narrow band if Supplement D says so |
+| U-Net, field → current | Reed et al. (MAGIC-UNet), arXiv 2407.14553; Phys. Rev. Applied 23, 034035 (2025) | [web]; journal reference from the DOI in search results | Learned current reconstruction; unknown standoff inside 50 ± 10 µm (Sec. III, Table V; checked 18 Nov) |
 | Untrained network with physics loss | Dubois et al., Phys. Rev. Applied 18, 064076 (2022) | [web] | Training-free neural reconstruction (magnetisation) |
 | Physics-informed deep image prior, scanning NV | arXiv 2604.23431 | [web] title only | Same idea, in-plane magnetisation |
 | Joint sensor distance and source, physics prior | Setescak et al., arXiv 2602.17180; Phys. Rev. Letters (2026) | [web] | Joint distance + reconstruction exists, for magnetisation, with a micromagnetic prior, not learned |

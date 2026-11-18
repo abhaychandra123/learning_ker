@@ -1,7 +1,8 @@
 # MAGIC-UNet for our standoff reconstruction
 
-7 November 2026. Port of MAGIC-UNet (Reed et al. 2024, arXiv 2407.14553, "Machine Learning
-for Improved Current Density Reconstruction from 2D Vector Magnetic Images") to our 3 → 0.5 µm
+7 November 2026. Port of MAGIC-UNet (Reed et al., "Machine learning for improved current-density
+reconstruction from two-dimensional vector magnetic images", Phys. Rev. Applied 23, 034035 (2025),
+doi:10.1103/PhysRevApplied.23.034035; preprint arXiv 2407.14553) to our 3 → 0.5 µm
 problem. **Run 2 (8 November 2026) scored 27.0% on COMSOL 3 → 0.5 µm without being told the
 standoff, against FISTA-300's 30.5%.** Run 1 was invalid (BatchNorm bug); see Results.
 
@@ -12,17 +13,17 @@ standoff, against FISTA-300's 30.5%.** Run 1 was invalid (BatchNorm bug); see Re
 | Task | Vector field (Bx, By, Bz) at one plane → planar current density (Jx, Jy). Not the near-plane field. |
 | Network | U-Net, 64×64 input, 3 levels of 2×2 average pooling, 64→128→256→512 channels, 3 × [conv3×3, BatchNorm, ReLU] per level, then **two separate decoders**, one for Jx and one for Jy. First (64-channel) skip connection omitted. |
 | Data | 153,600 training and 4,096 validation pairs, from random wires: Class I curves (COMSOL-simulated current), Class II straight segments; 2 mm field of view (31 µm pixels); 14 µm thick current layer; widths 9–320 µm; 2–311 mA. Fields from Fourier-space Biot–Savart. |
-| Standoff | Drawn per image from a normal distribution, 50 ± 10 µm (500 ± 50 µm for a second model). **The network is not told the standoff.** |
+| Standoff | Drawn per image from a normal distribution, 50 ± 10 µm (500 ± 50 µm for a separate second model). **The network is not told the standoff** (paper Sec. III, Table V, Sec. V C; checked against the published PDF 18 Nov 2026). |
 | Augmentation | 90° rotation, horizontal and vertical flips, each with 50% probability (8 variants). About 2% of images have wires only outside the field of view. |
 | Noise | Additive Gaussian, redrawn every epoch. σ_n = σ / max\|B\|. Training σ_n is not stated. |
-| Scaling | Each input divided by α = max over pixels of \|B\|; outputs divided by the same α and multiplied by a global β (~1e8). |
+| Scaling | Each input divided by its own scalar α_i; outputs divided by the same α_i and multiplied by a global β (~1e8) (App. A). The paper does not say what α_i is; we use max over pixels of \|B\|. |
 | Training | RMSprop, learning rate 1e-4, 50 epochs, mini-batch 32, MSE; TensorFlow 2.10; one RTX A6000; 11 hours. |
 | Larger images | Overlapping 64×64 tiles; overlaps divided equally between tiles, duplicates discarded (Fig. 5c). |
 | Results | SSIM 0.99 → 0.84 for σ_n 0 → 1, versus Fourier method 0.71 → 0.32; RMSE 3–4× lower. Weak on correlated experimental noise, multiple planes and 500 µm standoff. |
 
 ## Four sources, and which one we follow
 
-1. **The paper** (text, Fig. 1b, Table IV, Supplement).
+1. **The paper** (text, Fig. 1b, Table IV, Table V, Appendix A; the published version has no supplement).
 2. **The released trained model**, `MAGIC_UNet_64x64_50um/checkpoint/keras_metadata.pb`
    (Harvard Dataverse doi:10.7910/DVN/SD6PVP). Its full layer graph is saved in
    `tests/data/magic_unet_released_layers.json`. It agrees with the paper and settles the details:
@@ -45,7 +46,7 @@ So: architecture from source 2, training recipe from source 1.
 |---|---|
 | Our current-layout simulator (`scripts/simulate_fields.py`: spirals, meanders, mirrored arrays) instead of their wire classes | Their Class I needs COMSOL LiveLink; ours match the COMSOL test coils. Each layout gets a random quarter turn and mirror, which gives the paper's 8 augmentations physically, at the source (vector components stay consistent). |
 | Standoff N(3 µm, 0.6 µm), truncated at ±3σ (1.2–4.8 µm) | Same 20% spread as their 50 ± 10 µm, centred on our 3 → 0.5 µm benchmark. Unknown to the network, as in the paper. |
-| 0.2 µm pixels (0.1 µm simulation, area-averaged 2×2), 64×64 crops = 12.8 µm | Paper's image size. Measured pipeline floor with a perfect current: 2.93% at 0.2 µm vs 2.85% at 0.1 µm. **Caveat:** the tile is only ~4× the standoff (theirs ~40×), so most of every tile's field comes from wires outside it. |
+| 0.2 µm pixels (0.1 µm simulation, area-averaged 2×2), 64×64 crops = 12.8 µm | Paper's image size. Measured pipeline floor with a perfect current: 2.93% at 0.2 µm vs 2.85% at 0.1 µm. **Caveat:** the tile is only ~4× the standoff (their 50 µm model ~40×), so most of every tile's field comes from wires outside it. Their separate 500 µm model is also ~4× (2 mm view), and there the paper says both methods were too poor to score (Sec. III C). |
 | Target = equivalent sheet current J_eff = J·e^(−k·d) at the zero-offset plane, divergence-free | Our source offset d (0–0.2 µm) is unknown at test time. Predicting the true J and assuming the mean offset costs 5.1% at 0.5 µm even with a perfect J; J_eff makes B(h) = forward(J_eff, h) exact. |
 | Training noise: the paper's white Gaussian, with σ per layout taken from our simulator's setting (1, 1.5, 2 or 2.5% of each component's range) | The paper does not state its training σ_n. Never derived from COMSOL. Correlated noise (`--noise-corr-um`) is an ablation only; it is the authors' own suggested fix. |
 | β = power of ten making max\|J/α\| of order 1 (0.1 here, from training data) | Paper: "β ~ 1e8" for SI units; ours are µT and A/m. |

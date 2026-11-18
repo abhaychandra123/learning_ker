@@ -1,6 +1,6 @@
 """Training crops for MAGIC-UNet from the current-layout simulator.
 
-Follows the paper's recipe (Reed et al. 2024, Supplement D) where it applies at our scale:
+Follows the paper's recipe (Reed et al., Phys. Rev. Applied 23, 034035 (2025): Sec. V A, Table V, App. A) where it applies at our scale:
 
 - random current layouts (here: the simulator's spirals, meanders and mirrored arrays,
   each drawn with a random quarter turn and mirror, which gives the paper's

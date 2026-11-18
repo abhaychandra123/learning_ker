@@ -112,7 +112,7 @@ reference from memory, not re-fetched this session.
 | Work | What it does | What it gives us |
 |---|---|---|
 | Bathla et al. 2025, arXiv 2506.05491 (our group) [read, partly] | Measured coil-map dictionary + LASSO, 3D/temporal, ~7 µm standoff | The group's lineage; our CSC work extends it |
-| MAGIC-UNet, arXiv 2407.14553 [read + summary] | U-Net, (Bx, By, Bz) → (Jx, Jy); 153,600 Biot–Savart wire layouts; **fixed** ~50 µm standoff, 64×64, white noise | Strongest learned current-latent method. Standoff not an input; stated weaknesses: correlated noise, multiple planes, large standoff |
+| MAGIC-UNet, Phys. Rev. Applied 23, 034035 (2025), arXiv 2407.14553 [read in full, 18 Nov 2026] | U-Net, (Bx, By, Bz) → (Jx, Jy); 153,600 Biot–Savart wire layouts; standoff drawn per image from 50 ± 10 µm and not given to the network (Sec. III, Table V); a separate model at 500 ± 50 µm; 64×64, white noise | Strongest learned current-latent method. Standoff not an input; stated weaknesses: correlated noise, multiple planes, large standoff |
 | Dubois et al. 2022, PRApplied 18 064076 [abstract] | Untrained network outputs the source; exact forward model is the loss | No training data, so no simulator gap; geometry-agnostic by construction |
 | PI-DIP, arXiv 2604.23431 [abstract] | Physics-informed deep image prior, scanning NV; calls standoff "a critical source of uncertainty" | Supports making height a first-class unknown |
 | Setescak et al. 2026, PRL, arXiv 2602.17180 [abstract] | Micromagnetic energy as prior, FFT upward continuation, **jointly fits sensor distance** | Closest prior art for joint height + reconstruction. Magnetisation, not current; not learned; no uncertainty |

@@ -1,0 +1,159 @@
+\chapter{SSIM, noise and timing}\label{ch:noise}
+
+In the meeting of 18 November the group asked for four things before the evaluation: report the metrics that Reed et
+al.\ and the group's earlier work use (SSIM and RMSE), show what happens as the noise grows, compare our SSIM with
+the paper's, and say how fast each method is. This chapter answers all four. Nothing was trained and nothing was
+chosen on COMSOL; every number comes from models and settings fixed earlier.
+
+One decision was taken the same day: \textbf{COMSOL is now reported only on the re-solved L1\_C1} (the 1e-8
+tolerance solve of chapter~\ref{ch:comsol}). The original exports are known to be wrong, so they appear only as a
+reproduction check. Validation uses the free-space simulator.
+
+\section{What SSIM measures}
+
+Relative L2 adds up every pixel's error. SSIM (Wang et al.\ 2004) instead compares two images in small windows and
+asks three questions per window: is the mean the same (luminance), is the spread the same (contrast), and do the
+two go up and down together (structure)? With local means $\mu_x,\mu_y$, variances $\sigma_x^2,\sigma_y^2$ and
+covariance $\sigma_{xy}$, computed with an $11\times11$ Gaussian window of width 1.5 pixels,
+\begin{equation}
+\mathrm{SSIM} = \frac{(2\mu_x\mu_y + c_1)(2\sigma_{xy} + c_2)}{(\mu_x^2+\mu_y^2+c_1)(\sigma_x^2+\sigma_y^2+c_2)},
+\qquad c_1 = (0.01R)^2,\; c_2 = (0.03R)^2 ,
+\end{equation}
+averaged over all windows. $R$ is the data range, here the target's max $-$ min. SSIM is 1 for identical images. It is
+the function \texttt{ssim} in \texttt{scripts/magic\_unet.py}; the same function scores both $B$ and $J$.
+
+Two things to keep in mind. SSIM is dominated by the smooth parts of an image, which every method gets right, so the
+differences between methods look small (0.966 against 0.960). And SSIM forgives a wrong overall amplitude more than L2
+does: a map with the right shape but 60\% of the amplitude still has high structure.
+
+\section{Every method on the re-solved COMSOL coil}
+
+Each method was run again on the re-solved pair (code of amendment A7, with SSIM and RMSE added). Before scoring,
+each method reproduces its saved score on the original L1\_C1; every check passes (worst $4\times10^{-5}$) except
+FISTA-Net's, which misses the $10^{-4}$ tolerance by the same $3$--$4\times10^{-4}$ as before.
+
+\begin{center}
+\small
+\begin{tabular}{lrrrrrr}
+\toprule
+ & \multicolumn{3}{c}{3\,$\to$\,0.5\um} & \multicolumn{3}{c}{10\,$\to$\,0.5\um} \\
+Method & L2 & SSIM & RMSE (\textmu T) & L2 & SSIM & RMSE (\textmu T) \\
+\midrule
+MAGIC-UNet + correction & \textbf{22.0\%} & \textbf{0.966} & \textbf{4.17} & \textbf{26.2\%} & \textbf{0.965} & \textbf{5.02} \\
+MAGIC-UNet raw & 24.6\% & 0.963 & 4.63 & 26.3\% & 0.963 & 5.03 \\
+FISTA (925 / 3{,}000 it.) & 25.8\% & 0.960 & 4.97 & 47.2\% & 0.928 & 8.98 \\
+CSC-LISTA$^\ast$ & 34.1\% & 0.948 & 6.50 & 98.0\% & 0.868 & 18.5 \\
+FISTA-Net$^\ast$ & 32.6\% & 0.930 & 6.26 & 90.6\% & 0.881 & 17.1 \\
+Tikhonov & 48.8\% & 0.946 & 9.22 & 98.1\% & 0.871 & 18.5 \\
+\bottomrule
+\end{tabular}
+
+\smallskip
+{\footnotesize $^\ast$ At 10\um with their 3\um settings: not like-for-like (chapter~\ref{ch:ten_results}).
+One coil, one seed.}
+\end{center}
+
+SSIM ranks the methods exactly as L2 does, at both standoffs. The ranking does not depend on the metric.
+
+\section{The noise sweep}
+
+\paragraph{How it was done.} The first 20 validation layouts of the free-space simulator (the same layouts as every
+earlier simulated score), at 10 and 3\um. Each layout keeps its own noise pattern; only its level changes: 0, 1, 2,
+5, 10, 25, 50, 67 and 100\% of each component's range. The level ``native'' keeps each layout's own 1--2.5\% and
+must reproduce the saved scores; it does, to $1.4\times10^{-5}$ (10\um) and $1.1\times10^{-5}$ (3\um). The
+correction strength $\mu$ stays at its value chosen for 1--2.5\% noise.
+
+\paragraph{The paper's noise unit.} Reed et al.\ write the noise as $\sigma_n = \sigma/\max|B|$. On our layouts
+1\% of the range is $\sigma_n\approx0.015$, and 67\% is $\sigma_n\approx1$.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\textwidth]{ns_noise_sweep}
+\caption{(a) Field error at 0.5\um as the noise grows. (b) SSIM of the current density, the metric the paper reports,
+with the paper's two values in grey. Shaded: the noise the networks were trained with.}
+\end{figure}
+
+\begin{center}
+\small
+\begin{tabular}{lrrrrr}
+\toprule
+Noise & $\sigma_n$ & 10\um: $B$ error & 10\um: $J$ SSIM & 3\um: $B$ error & 3\um: $J$ SSIM \\
+\midrule
+0\% & 0 & 13.2\% & 0.978 & 5.8\% & 0.982 \\
+native 1--2.5\% & 0.024 & 14.7\% & 0.977 & 12.4\% & 0.865 \\
+5\% & 0.074 & 21.8\% & 0.957 & 31.2\% & 0.565 \\
+10\% & 0.149 & 48.9\% & 0.882 & 49.5\% & 0.332 \\
+25\% & 0.37 & 92.7\% & 0.737 & 355\% & 0.119 \\
+67\% & 1.0 & 112\% & 0.610 & 859\% & 0.024 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{What it shows.}
+\begin{enumerate}
+\item \textbf{Without noise our current SSIM is close to the paper's}: 0.978 and 0.982 against 0.99.
+\item \textbf{Beyond the training noise ours falls faster.} At $\sigma_n=1$ the paper reports 0.84; we get 0.61 at
+10\um and 0.02 at 3\um. We trained only at $\sigma_n\approx0.015$--$0.04$; the paper does not say what it used. A
+network only learns the noise it has seen, so the fix is to train with a wider range of noise.
+\item \textbf{The 10\um network is far more robust than the 3\um one.} Run B averages $7\times7$ input pixels into
+each 0.7\um network pixel, run 2 only $2\times2$, so the noise it sees is several times smaller.
+\item \textbf{At 3\um the noise is already most of the error}: 12.4\% at the native noise against 5.8\% with none.
+Better data would help this setting more than a better network.
+\item \textbf{The correction must be re-tuned for much noisier data.} Its $\mu$ was chosen at 1--2.5\% noise. At 3\um
+with 25\% noise or more it amplifies the noise (355\% against 124\% without it), because $H/(H^2+\mu)$ with a small
+$\mu$ boosts every frequency where the data are mostly noise.
+\end{enumerate}
+
+\paragraph{Against FISTA at 3\um.} FISTA-925 was run on the first 5 of the layouts at the same noise levels, once with
+its $\lambda$ fixed (as MAGIC-UNet's settings are) and once with $\lambda\times1$, 3 and 10, keeping the best per level
+(chosen on the same layouts, which favours FISTA).
+
+\begin{center}
+\small
+\begin{tabular}{lrrr}
+\toprule
+Noise & MAGIC-UNet + correction & FISTA, $\lambda$ fixed & FISTA, $\lambda$ re-tuned \\
+\midrule
+0\% & \textbf{6.1\%} & 14.4\% & 14.4\% \\
+native 1--2.5\% & \textbf{14.8\%} & 17.8\% & 17.8\% \\
+2\% & 16.7\% & 17.9\% & 17.9\% \\
+5\% & 30.0\% & 35.6\% & \textbf{27.5\%} \\
+10\% & 47.1\% & 88.9\% & \textbf{37.4\%} \\
+25\% & 313\% & 350\% & \textbf{92.1\%} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Inside the training noise MAGIC-UNet is better or level. Above it the answer depends on who is allowed to adapt: with
+everything left at its training-noise setting MAGIC-UNet still wins, but a FISTA whose one parameter $\lambda$ is
+raised for the noise wins from 5\% upward. The matching step for the network (re-choosing $\mu$, or training with more
+noise) was not done. The lesson is general: a learned prior is only as good as the conditions it was trained for,
+while a classical method with a single knob can be re-tuned on the spot.
+
+FISTA at 10\um (5 layouts) was still running when this chapter was written.
+
+\section{How fast}
+
+Wall time per $140\times140$\um image ($1400\times1400$ pixels), one RTX A6000, nothing else running:
+
+\begin{center}
+\small
+\begin{tabular}{lrr}
+\toprule
+Method & 3\,$\to$\,0.5\um & 10\,$\to$\,0.5\um \\
+\midrule
+MAGIC-UNet, network only & 0.42\,s & 0.12\,s \\
+MAGIC-UNet + height read-out + correction & 0.79\,s & 0.67\,s \\
+FISTA (925 / 3{,}000 iterations) & 91\,s & about 290\,s \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+MAGIC-UNet is about 115 times faster than FISTA at 3\um and 400 times faster at 10\um, and it estimates the standoff, which FISTA has to be told.
+
+\section{The FISTA depth at 10\um}
+
+Every 10\um FISTA number uses 3{,}000 iterations. The validation curve to 10{,}000 iterations has its minimum at
+3{,}125, but only 0.004 points lower (65.457\% against 65.460\%). The rule fixed in advance changes the depth only for a
+gain of at least 0.5 points, so 3{,}000 stays. In words: the best depth is about 3{,}000, and the two give the same
+error.

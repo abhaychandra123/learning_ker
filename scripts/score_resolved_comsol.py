@@ -12,6 +12,7 @@ export/<tag>_part.npz/.json with Bz maps for the figures (keys res<z>_<data>_<me
 """
 import csv
 import json
+import os
 from pathlib import Path
 import sys
 
@@ -19,6 +20,8 @@ import numpy as np
 
 ROOT = Path.cwd()
 OUT = ROOT / 'runs/comsol_resolved'
+# 18 Nov: QDM_RESOLVED_OUT writes a fresh copy (with SSIM) elsewhere; the input pairs stay in runs/comsol_resolved.
+OUT_DIR = Path(os.environ.get('QDM_RESOLVED_OUT', OUT))
 DATA = {'original': ROOT / 'runs/combined_full_200/comparison', 'resolved': OUT / 'comparison'}
 COMPONENTS = ('Bx', 'By', 'Bz')
 sys.path.insert(0, str(ROOT / 'experiments/magic_unet_10um/export'))
@@ -42,10 +45,14 @@ class Recorder:
         self.tag, self.add, self.rows, self.gate, self.arrays, self.meta = tag, add, [], [], {}, {}
 
     def record(self, method, z_in, data, field, truth, saved=None, tol=1e-4, h_star=None):
+        from magic_unet import ssim       # Wang et al. 2004, data range = target max - min (added 18 Nov)
         l2, nrmse = scores(field, truth)
+        f64 = np.asarray(field, np.float64)
         for c, comp in enumerate(COMPONENTS):
             self.rows.append(dict(method=method, z_input=z_in, data=data, component=comp, relative_l2=float(l2[c]),
-                                  nrmse=float(nrmse[c]), h_star='' if h_star is None else round(float(h_star), 3)))
+                                  nrmse=float(nrmse[c]), ssim=ssim(f64[c], truth[c]),
+                                  rmse_ut=float(np.sqrt(np.mean((f64[c] - truth[c]) ** 2))),
+                                  h_star='' if h_star is None else round(float(h_star), 3)))
         if saved is not None:
             diff = max(abs(float(l2[c]) - saved[comp]) for c, comp in enumerate(COMPONENTS))
             self.gate.append(dict(method=method, z_input=z_in, worst_abs_diff=diff, tolerance=tol, passed=diff <= tol))
@@ -59,17 +66,17 @@ class Recorder:
               + ('' if h_star is None else f'  h* {h_star:.2f}'), flush=True)
 
     def write(self):
-        OUT.mkdir(parents=True, exist_ok=True)
-        (OUT / 'export').mkdir(exist_ok=True)
-        with open(OUT / f'scores_{self.tag}.csv', 'w', newline='') as f:
+        OUT_DIR.mkdir(parents=True, exist_ok=True)
+        (OUT_DIR / 'export').mkdir(exist_ok=True)
+        with open(OUT_DIR / f'scores_{self.tag}.csv', 'w', newline='') as f:
             w = csv.DictWriter(f, fieldnames=list(self.rows[0]))
             w.writeheader()
             w.writerows(self.rows)
-        (OUT / f'gate_{self.tag}.json').write_text(json.dumps(self.gate, indent=2))
-        np.savez_compressed(OUT / 'export' / f'{self.tag}_part.npz', **self.arrays)
-        (OUT / 'export' / f'{self.tag}_part.json').write_text(json.dumps(self.meta, indent=2))
+        (OUT_DIR / f'gate_{self.tag}.json').write_text(json.dumps(self.gate, indent=2))
+        np.savez_compressed(OUT_DIR / 'export' / f'{self.tag}_part.npz', **self.arrays)
+        (OUT_DIR / 'export' / f'{self.tag}_part.json').write_text(json.dumps(self.meta, indent=2))
         if not all(g['passed'] for g in self.gate):
-            print('WARNING: a reproduction gate failed; see', OUT / f'gate_{self.tag}.json', flush=True)
+            print('WARNING: a reproduction gate failed; see', OUT_DIR / f'gate_{self.tag}.json', flush=True)
 
 
 def saved_rows(path, keep):

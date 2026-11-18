@@ -213,9 +213,8 @@ and 9–12 µm); on the near field, Tikhonov (3–4 µm) and FISTA (9 µm) are c
 - [ ] `README_SIMULATED_FIELDS.md` opens with "No model has been trained on it".
 - [ ] `PROJECT_CONTEXT.md` (29 September section) still says IC_2um and IC_4um are different geometries; they are the
       same coil.
-- [ ] `RESEARCH_BEYOND_ISTA.md` §4 says MAGIC-UNet used a fixed ~50 µm standoff; `README_MAGIC_UNET.md` says
-      50 ± 10 µm, unknown to the network. Re-read Supplement D of Reed et al. before the talk: it decides how much of
-      "works without the standoff" is new.
+- [x] MAGIC-UNet training standoff checked in the published paper (18 November): 50 ± 10 µm, unknown to the network
+      (Sec. III, Table V). `RESEARCH_BEYOND_ISTA.md` corrected. "Works without the standoff" is not new.
 - [ ] `FABLE_REVIEW.md` lists the geometry-capacity experiment as "no result on record"; results exist on the server
       (`runs/geometry_capacity_v1`, `logs/geometry_capacity_v1.launch.log`).
 

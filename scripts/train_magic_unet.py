@@ -1,10 +1,10 @@
 """Train MAGIC-UNet on simulated crops, then score it on simulated full images and COMSOL.
 
-Training follows Table IV and Supplement D of Reed et al. 2024 (arXiv 2407.14553):
+Training follows Table IV, Sec. V A and Appendix A of Reed et al., Phys. Rev. Applied 23, 034035 (2025):
 RMSprop (Keras defaults: rho 0.9, epsilon 1e-7), learning rate 1e-4, 50 epochs,
 mini-batch 32, mean squared error averaged over the Jx and Jy outputs, BatchNorm in
 training mode, fresh additive Gaussian noise on the inputs every epoch, inputs and
-outputs divided by the per-image alpha = max |B| and outputs multiplied by a global beta.
+outputs divided by the per-image alpha (ours: max |B|; the paper does not name it) and outputs multiplied by a global beta.
 The model saved after the last epoch is the result; there is no checkpoint selection.
 
 Evaluation (never used for any choice except the tiling stride, which is picked on

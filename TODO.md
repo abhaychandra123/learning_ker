@@ -18,12 +18,17 @@ chats "Final evaluation preparation", "fable milestoes", "syn fix" and this one.
   The material is in `final_evaluation/01_journey/JOURNEY.md`, section "For the presentation".
 - [ ] **Report:** `final_evaluation/06_report/` is still empty. Needed: the IITB template and the page limit.
   *(Final evaluation plan)*
-- [ ] **Timing table.** Inference time per method on the same GPU: FISTA at its best depth against one MAGIC-UNet pass
-  plus the correction. Evaluators will ask; it was never measured for the final methods. *(Final evaluation plan)*
+- [ ] **SSIM, noise sweep and timing (asked for in the 18 November meeting).** *MAGIC-UNet sweep, re-solved SSIM and MAGIC-UNet timing done 18 November 14:30 (README_NOISE_SSIM.md, SCOREBOARD, JOURNEY phase 11); FISTA at 3 µm done 16:33 (MAGIC-UNet better up to 2 % noise; FISTA with λ re-tuned wins from 5 %); FISTA at 10 µm still running.* Launched 18 November 13:35 server
+  time, inference only (`hpc/run_noise_sweep.sh`, outputs `runs/noise_sweep/`): MAGIC-UNet run B and run 2 on 20
+  simulated layouts at 0–100 % noise (J SSIM in the paper's σ_n convention, B L2/SSIM/RMSE); every method on the
+  re-solved L1_C1 with SSIM; FISTA on 5 layouts at 0–50 % (λ × 1, 3, 10 above 2.5 %). COMSOL is reported only on the
+  re-solved coil from now on. Write-up: `final_evaluation/02_source_docs/p11_noise_ssim/README_NOISE_SSIM.md`.
+  *(18 November meeting)*
+- [x] **Timing table.** Measured 18 November inside the noise sweep: MAGIC-UNet 0.67 s (10 µm) / 0.79 s (3 µm) per image with height read-out and correction, FISTA-3000 about 290 s, FISTA-925 91 s. *(Final evaluation plan)*
 - [x] **Figures for phase 7 at 3 µm, one colour scale:** `final_evaluation/04_figures/p7_m1_m2/comsol3_*_maps.png`
   (17 November; `scripts/export_3um_figures.py`). A seed bar chart is still missing. *(final_evaluation/README.md)*
-- [ ] **Check Supplement D of Reed et al.** Did they train over 50 ± 10 µm, or at a fixed ~50 µm? It decides how much of
-  "works without being told the standoff" is new. `RESEARCH_BEYOND_ISTA.md` §4 still says "fixed".
+- [x] **Check the training standoff of Reed et al.** Done 18 November from the published PDF: 50 ± 10 µm per image, never
+  given to the network (Sec. III, Table V, Sec. V C). The published version has no "Supplement D". Not new for us.
   *(Review §1.4, final_evaluation/README.md)*
 - [x] **Experimental data and the new COMSOL export.** Done by the "syn fix" chat on 17 November: real-data results in
   `final_evaluation/02_source_docs/p10_experimental/README_EXPERIMENTAL.md`, the COMSOL re-solve in `README_COMSOL_MODEL.md` §9,
@@ -36,6 +41,13 @@ chats "Final evaluation preparation", "fable milestoes", "syn fix" and this one.
   coil the 10 µm order reverses. FISTA-Net's reproduction gate failed by 0.03–0.04 point (reported with the flag).
   README_HIGH_STANDOFF §8, JOURNEY, SCOREBOARD, booklet §28.8. *(This chat)*
 - [ ] **Send the group a follow-up** with the full re-solved table (draft in `reports/group_update_resolve/followup.md`).
+
+- [ ] **Noise-aware training and correction.** The networks were trained only at σ_n ≈ 0.015–0.04 and fall faster than
+  the paper's model at high noise (J SSIM 0.61 at σ_n = 1 at 10 µm, 0.02 at 3 µm; paper 0.84). Train with a wider noise
+  range, and choose the correction's μ at the measured noise (at 3 µm with 25 % noise the fixed μ amplifies noise:
+  355 % against 124 % raw). *(Noise sweep, 18 November)*
+- [ ] **COMSOL only on re-solved data from now on**: needs the rest of COMSOL re-solved (see §4) before any COMSOL
+  statement covers more than L1_C1. *(18 November)*
 
 ## 1. A fair comparison at 10 µm
 
@@ -170,7 +182,7 @@ Details: `README_HIGH_STANDOFF.md` §7.3. *(This chat, 17 November)*
 
 - [ ] `README_SIMULATED_FIELDS.md` intro: check whether "no model has been trained on it" is still there. *(Plan)*
 - [ ] `PROJECT_CONTEXT.md`: one section still says IC_2um and IC_4um are different geometries; they are the same coil.
-- [ ] `RESEARCH_BEYOND_ISTA.md` §4: "fixed ~50 µm standoff" for MAGIC-UNet, after Supplement D is checked.
+- [x] `RESEARCH_BEYOND_ISTA.md` §4: "fixed ~50 µm standoff" for MAGIC-UNet corrected to 50 ± 10 µm (18 November).
 - [ ] `FABLE_REVIEW.md`: "geometry capacity: no result on record", once those results are written up.
 - [ ] Server clean-up: about 68 MB in `runs/high_standoff/export/`, and the crop sets of the 10 µm runs (12 GB) once
   nothing needs them. Ask before deleting.

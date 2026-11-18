@@ -116,7 +116,7 @@ class MAGICUNet(nn.Module):
 # ----------------------------------------------------------------- normalisation
 
 def alpha(b):
-    """Per-image scale of the paper: max over pixels of |B| (vector norm). b: [..., 3, H, W]."""
+    """Per-image scale alpha (Reed et al. App. A; the paper does not name it, we use max over pixels of |B|). b: [..., 3, H, W]."""
     return b.pow(2).sum(-3).sqrt().amax((-2, -1))
 
 
